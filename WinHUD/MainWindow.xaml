@@ -1,0 +1,38 @@
+﻿<Window x:Class="WinHUD.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WinHUD"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800"
+        Background="Transparent"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        Topmost="True"
+        >
+    <Grid>
+        <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10">
+
+            <TextBlock Name="CpuText" 
+                   Text="CPU: 0%" 
+                   FontSize="24" 
+                   FontWeight="Bold" 
+                   Foreground="White">
+                <TextBlock.Effect>
+                    <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock x:Name="RamText" 
+                   Text="RAM: 0 MB" 
+                   FontSize="24" 
+                   FontWeight="Bold" 
+                   Foreground="White">
+                <TextBlock.Effect>
+                    <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
+                </TextBlock.Effect>
+            </TextBlock>
+
+        </StackPanel>
+    </Grid>
+</Window>
