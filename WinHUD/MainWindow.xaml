@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WinHUD"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800"
+        Title="MainWindow"
+        SizeToContent="WidthAndHeight"
         Background="Transparent"
         AllowsTransparency="True"
         WindowStyle="None"
@@ -15,19 +16,51 @@
         <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10">
 
             <TextBlock Name="CpuText" 
-                   Text="CPU: 0%" 
-                   FontSize="24" 
-                   FontWeight="Bold" 
-                   Foreground="White">
+                Text="CPU: 0%" 
+                FontSize="12" 
+                FontWeight="Bold" 
+                FontFamily="Consolas"
+                Foreground="Green">
                 <TextBlock.Effect>
                     <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
                 </TextBlock.Effect>
             </TextBlock>
-            <TextBlock x:Name="RamText" 
-                   Text="RAM: 0 MB" 
-                   FontSize="24" 
-                   FontWeight="Bold" 
-                   Foreground="White">
+            <TextBlock x:Name="RamText"
+                Text="RAM: 0%"
+                FontSize="12" 
+                FontWeight="Bold" 
+                FontFamily="Consolas"
+                Foreground="Green">
+                <TextBlock.Effect>
+                    <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock Name="DiskText" 
+                Text="Disk: 0%" 
+                FontSize="12" 
+                FontWeight="Bold" 
+                FontFamily="Consolas"
+                Foreground="Green">
+                <TextBlock.Effect>
+                    <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock Name="DiskListText" 
+                Text="0 C: 0%" 
+                FontSize="12" 
+                FontWeight="Bold"
+                FontFamily="Consolas"
+                Foreground="Green">
+                <TextBlock.Effect>
+                    <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock Name="NetText" 
+                Text="Net: 0 KB/s" 
+                FontSize="12" 
+                FontWeight="Bold" 
+                FontFamily="Consolas"
+                Foreground="Green">
                 <TextBlock.Effect>
                     <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
                 </TextBlock.Effect>
