@@ -11,6 +11,8 @@
         AllowsTransparency="True"
         WindowStyle="None"
         Topmost="True"
+        ShowInTaskbar="False"
+        Opacity="0"
         >
     <Grid>
         <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10">

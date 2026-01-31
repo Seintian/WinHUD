@@ -4,13 +4,16 @@ using System.Runtime.InteropServices;   // Needed for Windows API calls
 using System.Windows;
 using System.Windows.Interop;           // Needed to access the window handle (HWND)
 using System.Windows.Threading;         // Needed for DispatcherTimer
-using System.Linq;                      // Needed for Sum()
 using System.Net.NetworkInformation;    // Needed for Network API
 
 namespace WinHUD
 {
     public partial class MainWindow : Window
     {
+        // 0. Settings
+        // trigger: The process name for Steam's In-Game Overlay
+        private const string TriggerProcessName = "gameoverlayui64";
+
         // 1. Define Counters
         private PerformanceCounter cpuCounter;
         private PerformanceCounter ramCounter;
@@ -22,7 +25,7 @@ namespace WinHUD
         private bool isFirstNetworkCheck = true;
 
         // 3. Timer for periodic updates
-        private DispatcherTimer updateTimer;
+        private readonly DispatcherTimer updateTimer;
 
         public MainWindow()
         {
@@ -37,7 +40,7 @@ namespace WinHUD
 
             // "PhysicalDisk", "Disk Bytes/sec", "_Total" covers all drives.
             diskCounter = new PerformanceCounter("PhysicalDisk", "Disk Bytes/sec", "_Total");
-            diskPercentageCounters = new List<(string, PerformanceCounter)>();
+            diskPercentageCounters = [];
             
             // Get all physical disk instances (e.g., "0 C:", "1 D:")
             var pdCategory = new PerformanceCounterCategory("PhysicalDisk");
@@ -56,8 +59,10 @@ namespace WinHUD
             }
 
             // 3. Setup the timer (Update every 1 second)
-            updateTimer = new DispatcherTimer();
-            updateTimer.Interval = TimeSpan.FromSeconds(1);
+            updateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
             updateTimer.Tick += UpdateTimer_Tick;
             updateTimer.Start();
 
@@ -69,65 +74,97 @@ namespace WinHUD
 
             // Event 2: When the text changes size (keeps it anchored bottom-left)
             this.SizeChanged += (s, e) => PositionWindowBottomLeft();
+
+            // START INVISIBLE: Wait for Steam Overlay
+            this.Opacity = 0;
         }
 
         // Update the method signature to explicitly allow nullable sender
         private void UpdateTimer_Tick(object? sender, EventArgs e)
         {
-            // 4. Read values
-            // NextValue() gets the current metric
-            float cpuUsage = cpuCounter.NextValue();
-            float availableRam = ramCounter.NextValue();
-            float diskBytesPerSec = diskCounter.NextValue();
+            var processes = Process.GetProcessesByName(TriggerProcessName);
+            bool isGameRunning = processes.Length > 0;
 
-            // --- NETWORK I/O ---
-            long currentNetworkBytes = GetTotalNetworkBytes();
-            // Calculate difference (Bytes per second)
-            long bytesDiff = currentNetworkBytes - oldNetworkBytes;
-
-            // Avoid huge spikes on the very first tick
-            if (isFirstNetworkCheck)
+            if (!isGameRunning)
             {
-                bytesDiff = 0;
-                isFirstNetworkCheck = false;
+                // If game stops, hide the window and stop processing metrics
+                if (this.Opacity > 0)
+                {
+                    this.Opacity = 0;
+                }
+
+                return; // Exit here to save CPU
             }
 
-            // Update baseline for next tick
-            oldNetworkBytes = currentNetworkBytes;
-
-            // Use StringBuilder to build the list efficiently
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-
-            foreach (var item in diskPercentageCounters)
+            // --- STEP 2: SHOW & POSITION ---
+            // If game just started (window was hidden), show it and reset position
+            if (this.Opacity < 1)
             {
-                float usage = item.Counter.NextValue();
-
-                // Clamp to 100% (rarely, disk time can report >100% due to overlapping requests)
-                if (usage > 100) usage = 100;
-
-                // Append line: "0 C: - 45%"
-                sb.AppendLine($"Disk {item.Name} - {usage:F0}%");
+                this.Opacity = 1;
+                
+                // Force a layout update so we get the correct size
+                this.UpdateLayout();
+                PositionWindowBottomLeft(); // Snap to position immediately
             }
 
-            // Update the UI
-            DiskListText.Text = sb.ToString();
-
-            // 5. Update UI
-            // Note: We format the CPU to 1 decimal place (F1)
-            CpuText.Text = $"CPU: {cpuUsage:F1}%";
-            RamText.Text = $"Free RAM: {availableRam} MB";
-            DiskText.Text = $"Disk Total: {FormatSpeed(diskBytesPerSec)}";
-            NetText.Text = $"Net: {FormatSpeed(bytesDiff)}";
-
-            // If the window somehow lost its Topmost status (e.g., you Alt-Tabbed), force it back.
+            // --- STEP 4: ENFORCE TOPMOST ---
+            // Force the window to stay on top of the game
             if (!this.Topmost)
             {
                 this.Topmost = true;
             }
+
+            // --- STEP 5: UPDATE METRICS ---
+            UpdateMetrics();
+        }
+
+        private void UpdateMetrics()
+        {
+            // --- STEP 3: UPDATE METRICS ---
+            try
+            {
+                // 4. Read values
+                float cpuUsage = cpuCounter.NextValue();
+                float availableRam = ramCounter.NextValue();
+                float diskBytesPerSec = diskCounter.NextValue();
+
+                // --- NETWORK I/O ---
+                long currentNetworkBytes = GetTotalNetworkBytes();
+                long bytesDiff = currentNetworkBytes - oldNetworkBytes;
+
+                if (isFirstNetworkCheck)
+                {
+                    bytesDiff = 0;
+                    isFirstNetworkCheck = false;
+                }
+                oldNetworkBytes = currentNetworkBytes;
+
+                // --- DISK LIST ---
+                System.Text.StringBuilder sb = new();
+                foreach (var item in diskPercentageCounters)
+                {
+                    float usage = item.Counter.NextValue();
+                    if (usage > 100) usage = 100;
+                    sb.AppendLine($"Disk {item.Name} - {usage:F0}%");
+                }
+                DiskListText.Text = sb.ToString();
+
+                // 5. Update UI
+                CpuText.Text = $"CPU: {cpuUsage:F1}%";
+                RamText.Text = $"Free RAM: {availableRam} MB";
+                DiskText.Text = $"Disk Total: {FormatSpeed(diskBytesPerSec)}";
+                NetText.Text = $"Net: {FormatSpeed(bytesDiff)}";
+            }
+            catch
+            {
+                // Handle error as appropriate (e.g., log, throw, etc.)
+                // For now, just throw an exception
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            }
         }
 
         // Helper: Get total bytes (Sent + Received) across all active interfaces
-        private long GetTotalNetworkBytes()
+        private static long GetTotalNetworkBytes()
         {
             long total = 0;
 
@@ -145,7 +182,7 @@ namespace WinHUD
         }
 
         // Helper: Format bytes to KB/s or MB/s
-        private string FormatSpeed(float bytesPerSec)
+        private static string FormatSpeed(float bytesPerSec)
         {
             if (bytesPerSec < 1024) return $"{bytesPerSec:F0} B/s";
             if (bytesPerSec < 1024 * 1024) return $"{bytesPerSec / 1024:F1} KB/s";
