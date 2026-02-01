@@ -1,358 +1,178 @@
-﻿using Microsoft.Win32;                  // Needed for Registry access
-using System;
-using System.Diagnostics;               // Needed for PerformanceCounter
-using System.Net.NetworkInformation;    // Needed for Network API
-using System.Runtime.InteropServices;   // Needed for Windows API calls
+﻿using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Interop;           // Needed to access the window handle (HWND)
-using System.Windows.Threading;         // Needed for DispatcherTimer
+using System.Windows.Interop;
+using System.Windows.Threading;
+using WinHUD.Core;
+using WinHUD.Services;
 
 namespace WinHUD
 {
     public partial class MainWindow : Window
     {
-        // 0. Settings
-        // trigger: The process name for Steam's In-Game Overlay
-        private const string TriggerProcessName = "gameoverlayui64";
+        // --- CONFIG ---
+        private const string TargetProcess = "gameoverlayui64";
 
-        // 1. Define Counters
-        private readonly PerformanceCounter? cpuCounter;
-        private readonly PerformanceCounter? ramCounter;
-        private readonly PerformanceCounter? diskCounter;
-        private readonly List<(string Name, PerformanceCounter Counter)>? diskPercentageCounters;
+        // --- SERVICES ---
+        private PerformanceMonitor? _monitor;
+        private readonly DispatcherTimer _timer;
 
-        // 2. Network tracking variables
-        private long oldNetworkBytes = 0;
-        private bool isFirstNetworkCheck = true;
-
-        // 3. Timer for periodic updates
-        private readonly DispatcherTimer? updateTimer;
-
-        // 4. Manual Show/Hide Toggle
-        private bool _manualShow = false;
+        // --- STATE ---
+        private bool _isManualOverride = false;
+        private IntPtr _windowHandle;
 
         public MainWindow()
         {
-            // Ensure the app is set to start with Windows
-            EnsureStartup();
-
             InitializeComponent();
+            StartupManager.EnsureAppRunsAtStartup();
 
-            try
-            {
-                // 1. Initialize the counters
-                // "Processor", "% Processor Time", "_Total" = Total CPU usage across all cores
-                cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+            // Initialize Timer
+            _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _timer.Tick += OnGameLoopTick;
 
-                // "Memory", "Available MBytes" = Free RAM
-                ramCounter = new PerformanceCounter("Memory", "Available MBytes");
+            // Whenever the text grows/shrinks, re-calculate position immediately
+            this.SizeChanged += OnWindowSizeChanged;
 
-                // "PhysicalDisk", "Disk Bytes/sec", "_Total" covers all drives.
-                diskCounter = new PerformanceCounter("PhysicalDisk", "Disk Bytes/sec", "_Total");
-                diskPercentageCounters = [];
-
-                // Get all physical disk instances (e.g., "0 C:", "1 D:")
-                var pdCategory = new PerformanceCounterCategory("PhysicalDisk");
-                var instanceNames = pdCategory.GetInstanceNames();
-
-                foreach (var name in instanceNames)
-                {
-                    // Ignore "_Total" because we want individual drives
-                    if (name == "_Total") continue;
-
-                    // Create a counter for "% Disk Time" (Active usage)
-                    var pCounter = new PerformanceCounter("PhysicalDisk", "% Disk Time", name);
-
-                    // Add to our list
-                    diskPercentageCounters.Add((name, pCounter));
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error initializing performance counters: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                Application.Current.Shutdown();
-                return;
-            }
-
-            // 3. Setup the timer (Update every 1 second)
-            updateTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            }!;
-            updateTimer.Tick += UpdateTimer_Tick;
-            updateTimer.Start();
-
-            // 2. Network baseline setup
-            oldNetworkBytes = GetTotalNetworkBytes();
-
-            // Event 1: When the window loads
-            this.Loaded += (s, e) => PositionWindowBottomLeft();
-
-            // Event 2: When the text changes size (keeps it anchored bottom-left)
-            this.SizeChanged += (s, e) => PositionWindowBottomLeft();
-
-            // START INVISIBLE: Wait for Steam Overlay
+            // Start State
             this.Opacity = 0;
+            InitializePerformanceMonitor();
+            _timer.Start();
         }
 
-        private static void EnsureStartup()
+        private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            const string AppName = "WinHUD";
-            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            if (this.Opacity > 0 && _windowHandle != IntPtr.Zero)
+            {
+                // 1. Find the monitor the window is CURRENTLY on
+                IntPtr hMonitor = NativeMethods.MonitorFromWindow(_windowHandle, NativeMethods.MONITOR_DEFAULTTONEAREST);
 
+                // 2. Get that monitor's Work Area
+                var mi = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf(typeof(NativeMethods.MONITORINFO)) };
+                if (NativeMethods.GetMonitorInfo(hMonitor, ref mi))
+                {
+                    var workArea = mi.rcWork;
+
+                    // 3. Re-position: Keep Left, but adjust Top to grow "Upwards"
+                    this.Left = workArea.Left + 10;
+                    this.Top = workArea.Bottom - this.ActualHeight - 10;
+                }
+            }
+        }
+
+        private void InitializePerformanceMonitor()
+        {
             try
             {
-                // Open the Registry Key for the current user's startup programs
-                using RegistryKey? key = Registry.CurrentUser?.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-                if (key != null && exePath != null)
-                {
-                    // Check if the value already exists to avoid writing every time
-                    var existingValue = key.GetValue(AppName);
-
-                    if (existingValue == null || existingValue.ToString() != exePath)
-                    {
-                        // Register it!
-                        key.SetValue(AppName, exePath);
-
-                        // Optional: Log/Debug that we registered it
-                        System.Diagnostics.Debug.WriteLine("Startup Registered!");
-                    }
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("Failed to open Registry key for startup.");
-                }
+                _monitor = new PerformanceMonitor();
             }
             catch (Exception ex)
             {
-                // Handle exceptions as appropriate (e.g., log, notify user, etc.)
-                System.Diagnostics.Debug.WriteLine($"Failed to register startup: {ex.Message}");
+                MessageBox.Show($"Failed to init counters: {ex.Message}");
             }
         }
 
-        // Update the method signature to explicitly allow nullable sender
-        private void UpdateTimer_Tick(object? sender, EventArgs e)
+        // --- THE MAIN LOOP ---
+        private void OnGameLoopTick(object? sender, EventArgs e)
         {
-            var processes = Process.GetProcessesByName(TriggerProcessName);
-            bool isGameRunning = processes.Length > 0;
+            bool isGameActive = GameDetector.IsProcessRunning(TargetProcess);
+            bool shouldShow = isGameActive || _isManualOverride;
 
-            // --- DETERMINE VISIBILITY ---
-            // Show if Game is running OR User manually toggled it ON
-            bool shouldShow = isGameRunning || _manualShow;
-
-            if (!shouldShow)
+            if (shouldShow)
             {
-                // If game stops, hide the window and stop processing metrics
-                if (this.Opacity > 0)
-                {
-                    this.Opacity = 0;
-                }
-
-                return; // Exit here to save CPU
+                ShowWindow();
+                UpdateUI();
             }
+            else
+            {
+                HideWindow();
+            }
+        }
 
-            // --- STEP 2: SHOW & POSITION ---
-            // If game just started (window was hidden), show it and reset position
+        // --- ATOMIC ACTIONS ---
+
+        private void ShowWindow()
+        {
             if (this.Opacity < 1)
             {
                 this.Opacity = 1;
-                
-                // Force a layout update so we get the correct size
                 this.UpdateLayout();
-                PositionWindowBottomLeft(); // Snap to position immediately
             }
 
-            // --- STEP 4: ENFORCE TOPMOST ---
-            // Force the window to stay on top of the game
-            if (!this.Topmost)
-            {
-                this.Topmost = true;
-            }
-
-            // --- STEP 5: UPDATE METRICS ---
-            UpdateMetrics();
+            // Enforce "Always On Top"
+            this.Topmost = false;
+            this.Topmost = true;
         }
 
-        private void UpdateMetrics()
+        private void HideWindow()
         {
-            // --- STEP 3: UPDATE METRICS ---
-            try
+            if (this.Opacity > 0) this.Opacity = 0;
+        }
+
+        private void UpdateUI()
+        {
+            if (_monitor == null) return;
+
+            CpuText.Text = $"CPU: {_monitor.GetCpuUsage()}";
+            RamText.Text = $"RAM: {_monitor.GetRamUsage()}";
+            DiskText.Text = $"Disk: {_monitor.GetTotalDiskSpeed()}";
+            NetText.Text = $"Net: {_monitor.GetNetworkSpeed()}";
+            DiskListText.Text = _monitor.GetDiskLoadSummary();
+        }
+
+        // --- WINDOW POSITIONING (Native Method) ---
+        private void SnapToBottomLeftOfActiveScreen()
+        {
+            // 1. Get Mouse Position
+            NativeMethods.GetCursorPos(out var point);
+
+            // 2. Find Monitor where mouse is
+            IntPtr hMonitor = NativeMethods.MonitorFromPoint(point, 2 /* MONITOR_DEFAULTTONEAREST */);
+
+            // 3. Get Monitor Work Area
+            var mi = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf(typeof(NativeMethods.MONITORINFO)) };
+            if (NativeMethods.GetMonitorInfo(hMonitor, ref mi))
             {
-                // 4. Read values
-                float cpuUsage = cpuCounter!.NextValue();
-                float availableRam = ramCounter!.NextValue();
-                float diskBytesPerSec = diskCounter!.NextValue();
+                var workArea = mi.rcWork;
 
-                // --- NETWORK I/O ---
-                long currentNetworkBytes = GetTotalNetworkBytes();
-                long bytesDiff = currentNetworkBytes - oldNetworkBytes;
-
-                if (isFirstNetworkCheck)
-                {
-                    bytesDiff = 0;
-                    isFirstNetworkCheck = false;
-                }
-                oldNetworkBytes = currentNetworkBytes;
-
-                // --- DISK LIST ---
-                System.Text.StringBuilder sb = new();
-                foreach (var item in diskPercentageCounters!)
-                {
-                    float usage = item.Counter.NextValue();
-                    if (usage > 100) usage = 100;
-                    sb.AppendLine($"Disk {item.Name} - {usage:F0}%");
-                }
-                DiskListText.Text = sb.ToString();
-
-                // 5. Update UI
-                CpuText.Text = $"CPU: {cpuUsage:F1}%";
-                RamText.Text = $"Free RAM: {availableRam} MB";
-                DiskText.Text = $"Disk Total: {FormatSpeed(diskBytesPerSec)}";
-                NetText.Text = $"Net: {FormatSpeed(bytesDiff)}";
-            }
-            catch
-            {
-                // Handle error as appropriate (e.g., log, throw, etc.)
-                // For now, just throw an exception
-                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+                // 4. Calculate Position (Left-Bottom with 10px padding)
+                this.Left = workArea.Left + 10;
+                this.Top = workArea.Bottom - this.ActualHeight - 10;
             }
         }
 
-        // Helper: Get total bytes (Sent + Received) across all active interfaces
-        private static long GetTotalNetworkBytes()
-        {
-            long total = 0;
+        // --- WINDOW SETUP (Hotkeys & Transparency) ---
 
-            // Get all interfaces that are UP and not Loopback (127.0.0.1)
-            var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(ni => ni.OperationalStatus == OperationalStatus.Up
-                          && ni.NetworkInterfaceType != NetworkInterfaceType.Loopback);
-
-            foreach (var ni in interfaces)
-            {
-                var stats = ni.GetIPStatistics();
-                total += (stats.BytesReceived + stats.BytesSent);
-            }
-            return total;
-        }
-
-        // Helper: Format bytes to KB/s or MB/s
-        private static string FormatSpeed(float bytesPerSec)
-        {
-            if (bytesPerSec < 1024) return $"{bytesPerSec:F0} B/s";
-            if (bytesPerSec < 1024 * 1024) return $"{bytesPerSec / 1024:F1} KB/s";
-            return $"{bytesPerSec / (1024 * 1024):F1} MB/s";
-        }
-
-        private void PositionWindowBottomLeft()
-        {
-            // Get the screen's working area (excludes taskbar)
-            var workArea = SystemParameters.WorkArea;
-
-            // Calculate position: Left Edge + 10px margin
-            this.Left = workArea.Left + 10;
-
-            // Calculate position: Bottom Edge - Window Height - 10px margin
-            this.Top = workArea.Bottom - this.ActualHeight - 10;
-        }
-
-        // 1. Define the Windows API constants for window styles
-        const int WS_EX_TRANSPARENT = 0x00000020; // Click-through (Ghost)
-        const int WS_EX_TOPMOST     = 0x00000008; // Always on top
-        const int WS_EX_TOOLWINDOW  = 0x00000080; // Hides from Alt+Tab
-        const int GWL_EXSTYLE       = -20;        // Get/Set Extended Style
-        
-        // --- KEY DEFINITIONS ---
-        const int HOTKEY_ID = 9000;
-
-        // Modifiers:
-        // Alt = 1, Ctrl = 2, Shift = 4, Win = 8
-        const uint MOD_ALT = 0x0001;
-        const uint MOD_CONTROL = 0x0002;
-        const uint MOD_SHIFT = 0x0004;
-        const uint MOD_WIN = 0x0008;
-
-        // Virtual Key Codes:
-        const uint VK_H = 0x48; // 'H' key
-
-        // Current Combo: CTRL + SHIFT + H
-        const uint SELECTED_MODIFIERS = MOD_ALT | MOD_SHIFT;
-        const uint SELECTED_KEY = VK_H;
-
-        const int WM_HOTKEY = 0x0312;
-
-        // 2. Import the necessary functions from user32.dll (The core Windows UI library)
-        [DllImport("user32.dll")]
-        public static extern int GetWindowLong(IntPtr hwnd, int index);
-
-        [DllImport("user32.dll")]
-        public static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
-        
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        // Window's Handle
-        private IntPtr hwnd;
-
-        // 3. Apply the styles when the window loads
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
+            _windowHandle = new WindowInteropHelper(this).Handle;
 
-            // Get the "Handle" (ID) of this window
-            hwnd = new WindowInteropHelper(this).Handle;
+            // 1. Make Transparent & Ghost
+            NativeMethods.SetWindowGhostMode(_windowHandle);
 
-            // Get the current style
-            int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            // 2. Register Hotkey (Alt + Shift + H)
+            // MOD_ALT(1) | MOD_SHIFT(4) = 5. VK_H = 0x48.
+            bool success = NativeMethods.RegisterHotKey(_windowHandle, 9000, 5, 0x48);
+            if (!success) Debug.WriteLine("Failed to register hotkey.");
 
-            // Add the "Ghost" and "TopMost" flags
-            int result = SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_TOPMOST);
-
-            // Optionally, check for errors (SetWindowLong returns 0 on failure)
-            if (result == 0)
-            {
-                // Handle error as appropriate (e.g., log, throw, etc.)
-                // For now, just throw an exception
-                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-            }
-
-            // Register Hotkey (Win + Shift + H)
-            bool success = RegisterHotKey(hwnd, HOTKEY_ID, SELECTED_MODIFIERS, SELECTED_KEY);
-            if (!success)
-            {
-                /// If this pops up, the key is already taken!
-                MessageBox.Show($"Could not register hotkey (Error {Marshal.GetLastWin32Error()}).\nTry changing the key combination in code.", "WinHUD Error");
-            }
-
-            // 4. Add Hook to listen for keypress
-            HwndSource source = HwndSource.FromHwnd(hwnd);
-            source.AddHook(HwndHook);
+            // 3. Listen for Hotkey
+            HwndSource.FromHwnd(_windowHandle).AddHook(HwndHook);
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            // Unregister to be polite to other apps
-            UnregisterHotKey(hwnd, HOTKEY_ID);
+            NativeMethods.UnregisterHotKey(_windowHandle, 9000);
             base.OnClosed(e);
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // Listen for the Hotkey Message
-            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == 9000)
             {
-                // Toggle Manual State
-                _manualShow = !_manualShow;
-
-                // Beep to confirm (Optional, good for debugging)
-                // System.Media.SystemSounds.Beep.Play(); 
-
+                _isManualOverride = !_isManualOverride;
                 handled = true;
             }
-
             return IntPtr.Zero;
         }
     }
