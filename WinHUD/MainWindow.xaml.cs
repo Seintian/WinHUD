@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Interop;           // Needed to access the window handle (HWND)
 using System.Windows.Threading;         // Needed for DispatcherTimer
 using System.Net.NetworkInformation;    // Needed for Network API
+using Microsoft.Win32;                  // Needed for Registry access
 
 namespace WinHUD
 {
@@ -29,6 +30,9 @@ namespace WinHUD
 
         public MainWindow()
         {
+            // Ensure the app is set to start with Windows
+            EnsureStartup();
+
             InitializeComponent();
 
             // 1. Initialize the counters
@@ -77,6 +81,31 @@ namespace WinHUD
 
             // START INVISIBLE: Wait for Steam Overlay
             this.Opacity = 0;
+        }
+
+        private void EnsureStartup()
+        {
+            const string AppName = "WinHUD";
+            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+
+            // Open the Registry Key for the current user's startup programs
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
+            {
+                if (key != null && exePath != null)
+                {
+                    // Check if the value already exists to avoid writing every time
+                    var existingValue = key.GetValue(AppName);
+
+                    if (existingValue == null || existingValue.ToString() != exePath)
+                    {
+                        // Register it!
+                        key.SetValue(AppName, exePath);
+
+                        // Optional: Log/Debug that we registered it
+                        System.Diagnostics.Debug.WriteLine("Startup Registered!");
+                    }
+                }
+            }
         }
 
         // Update the method signature to explicitly allow nullable sender
@@ -203,8 +232,9 @@ namespace WinHUD
 
         // 1. Define the Windows API constants for window styles
         const int WS_EX_TRANSPARENT = 0x00000020; // Click-through (Ghost)
-        const int WS_EX_TOPMOST = 0x00000008;     // Always on top
-        const int GWL_EXSTYLE = -20;              // Get/Set Extended Style
+        const int WS_EX_TOPMOST     = 0x00000008; // Always on top
+        const int WS_EX_TOOLWINDOW  = 0x00000080; // Hides from Alt+Tab
+        const int GWL_EXSTYLE       = -20;        // Get/Set Extended Style
 
         // 2. Import the necessary functions from user32.dll (The core Windows UI library)
         [DllImport("user32.dll")]
@@ -225,7 +255,7 @@ namespace WinHUD
             int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
 
             // Add the "Ghost" and "TopMost" flags
-            int result = SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_TOPMOST);
+            int result = SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_TOPMOST);
 
             // Optionally, check for errors (SetWindowLong returns 0 on failure)
             if (result == 0)
