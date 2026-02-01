@@ -1,11 +1,11 @@
-﻿using System;
+﻿using Microsoft.Win32;                  // Needed for Registry access
+using System;
 using System.Diagnostics;               // Needed for PerformanceCounter
+using System.Net.NetworkInformation;    // Needed for Network API
 using System.Runtime.InteropServices;   // Needed for Windows API calls
 using System.Windows;
 using System.Windows.Interop;           // Needed to access the window handle (HWND)
 using System.Windows.Threading;         // Needed for DispatcherTimer
-using System.Net.NetworkInformation;    // Needed for Network API
-using Microsoft.Win32;                  // Needed for Registry access
 
 namespace WinHUD
 {
@@ -16,17 +16,20 @@ namespace WinHUD
         private const string TriggerProcessName = "gameoverlayui64";
 
         // 1. Define Counters
-        private PerformanceCounter cpuCounter;
-        private PerformanceCounter ramCounter;
-        private PerformanceCounter diskCounter;
-        private List<(string Name, PerformanceCounter Counter)> diskPercentageCounters;
+        private readonly PerformanceCounter? cpuCounter;
+        private readonly PerformanceCounter? ramCounter;
+        private readonly PerformanceCounter? diskCounter;
+        private readonly List<(string Name, PerformanceCounter Counter)>? diskPercentageCounters;
 
         // 2. Network tracking variables
         private long oldNetworkBytes = 0;
         private bool isFirstNetworkCheck = true;
 
         // 3. Timer for periodic updates
-        private readonly DispatcherTimer updateTimer;
+        private readonly DispatcherTimer? updateTimer;
+
+        // 4. Manual Show/Hide Toggle
+        private bool _manualShow = false;
 
         public MainWindow()
         {
@@ -35,38 +38,47 @@ namespace WinHUD
 
             InitializeComponent();
 
-            // 1. Initialize the counters
-            // "Processor", "% Processor Time", "_Total" = Total CPU usage across all cores
-            cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-
-            // "Memory", "Available MBytes" = Free RAM
-            ramCounter = new PerformanceCounter("Memory", "Available MBytes");
-
-            // "PhysicalDisk", "Disk Bytes/sec", "_Total" covers all drives.
-            diskCounter = new PerformanceCounter("PhysicalDisk", "Disk Bytes/sec", "_Total");
-            diskPercentageCounters = [];
-            
-            // Get all physical disk instances (e.g., "0 C:", "1 D:")
-            var pdCategory = new PerformanceCounterCategory("PhysicalDisk");
-            var instanceNames = pdCategory.GetInstanceNames();
-
-            foreach (var name in instanceNames)
+            try
             {
-                // Ignore "_Total" because we want individual drives
-                if (name == "_Total") continue;
+                // 1. Initialize the counters
+                // "Processor", "% Processor Time", "_Total" = Total CPU usage across all cores
+                cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
 
-                // Create a counter for "% Disk Time" (Active usage)
-                var pCounter = new PerformanceCounter("PhysicalDisk", "% Disk Time", name);
+                // "Memory", "Available MBytes" = Free RAM
+                ramCounter = new PerformanceCounter("Memory", "Available MBytes");
 
-                // Add to our list
-                diskPercentageCounters.Add((name, pCounter));
+                // "PhysicalDisk", "Disk Bytes/sec", "_Total" covers all drives.
+                diskCounter = new PerformanceCounter("PhysicalDisk", "Disk Bytes/sec", "_Total");
+                diskPercentageCounters = [];
+
+                // Get all physical disk instances (e.g., "0 C:", "1 D:")
+                var pdCategory = new PerformanceCounterCategory("PhysicalDisk");
+                var instanceNames = pdCategory.GetInstanceNames();
+
+                foreach (var name in instanceNames)
+                {
+                    // Ignore "_Total" because we want individual drives
+                    if (name == "_Total") continue;
+
+                    // Create a counter for "% Disk Time" (Active usage)
+                    var pCounter = new PerformanceCounter("PhysicalDisk", "% Disk Time", name);
+
+                    // Add to our list
+                    diskPercentageCounters.Add((name, pCounter));
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing performance counters: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Application.Current.Shutdown();
+                return;
             }
 
             // 3. Setup the timer (Update every 1 second)
             updateTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(1)
-            };
+            }!;
             updateTimer.Tick += UpdateTimer_Tick;
             updateTimer.Start();
 
@@ -83,14 +95,15 @@ namespace WinHUD
             this.Opacity = 0;
         }
 
-        private void EnsureStartup()
+        private static void EnsureStartup()
         {
             const string AppName = "WinHUD";
-            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
 
-            // Open the Registry Key for the current user's startup programs
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
+            try
             {
+                // Open the Registry Key for the current user's startup programs
+                using RegistryKey? key = Registry.CurrentUser?.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
                 if (key != null && exePath != null)
                 {
                     // Check if the value already exists to avoid writing every time
@@ -105,6 +118,15 @@ namespace WinHUD
                         System.Diagnostics.Debug.WriteLine("Startup Registered!");
                     }
                 }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("Failed to open Registry key for startup.");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle exceptions as appropriate (e.g., log, notify user, etc.)
+                System.Diagnostics.Debug.WriteLine($"Failed to register startup: {ex.Message}");
             }
         }
 
@@ -114,7 +136,11 @@ namespace WinHUD
             var processes = Process.GetProcessesByName(TriggerProcessName);
             bool isGameRunning = processes.Length > 0;
 
-            if (!isGameRunning)
+            // --- DETERMINE VISIBILITY ---
+            // Show if Game is running OR User manually toggled it ON
+            bool shouldShow = isGameRunning || _manualShow;
+
+            if (!shouldShow)
             {
                 // If game stops, hide the window and stop processing metrics
                 if (this.Opacity > 0)
@@ -153,9 +179,9 @@ namespace WinHUD
             try
             {
                 // 4. Read values
-                float cpuUsage = cpuCounter.NextValue();
-                float availableRam = ramCounter.NextValue();
-                float diskBytesPerSec = diskCounter.NextValue();
+                float cpuUsage = cpuCounter!.NextValue();
+                float availableRam = ramCounter!.NextValue();
+                float diskBytesPerSec = diskCounter!.NextValue();
 
                 // --- NETWORK I/O ---
                 long currentNetworkBytes = GetTotalNetworkBytes();
@@ -170,7 +196,7 @@ namespace WinHUD
 
                 // --- DISK LIST ---
                 System.Text.StringBuilder sb = new();
-                foreach (var item in diskPercentageCounters)
+                foreach (var item in diskPercentageCounters!)
                 {
                     float usage = item.Counter.NextValue();
                     if (usage > 100) usage = 100;
@@ -235,6 +261,25 @@ namespace WinHUD
         const int WS_EX_TOPMOST     = 0x00000008; // Always on top
         const int WS_EX_TOOLWINDOW  = 0x00000080; // Hides from Alt+Tab
         const int GWL_EXSTYLE       = -20;        // Get/Set Extended Style
+        
+        // --- KEY DEFINITIONS ---
+        const int HOTKEY_ID = 9000;
+
+        // Modifiers:
+        // Alt = 1, Ctrl = 2, Shift = 4, Win = 8
+        const uint MOD_ALT = 0x0001;
+        const uint MOD_CONTROL = 0x0002;
+        const uint MOD_SHIFT = 0x0004;
+        const uint MOD_WIN = 0x0008;
+
+        // Virtual Key Codes:
+        const uint VK_H = 0x48; // 'H' key
+
+        // Current Combo: CTRL + SHIFT + H
+        const uint SELECTED_MODIFIERS = MOD_ALT | MOD_SHIFT;
+        const uint SELECTED_KEY = VK_H;
+
+        const int WM_HOTKEY = 0x0312;
 
         // 2. Import the necessary functions from user32.dll (The core Windows UI library)
         [DllImport("user32.dll")]
@@ -242,6 +287,15 @@ namespace WinHUD
 
         [DllImport("user32.dll")]
         public static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+        
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        // Window's Handle
+        private IntPtr hwnd;
 
         // 3. Apply the styles when the window loads
         protected override void OnSourceInitialized(EventArgs e)
@@ -249,7 +303,7 @@ namespace WinHUD
             base.OnSourceInitialized(e);
 
             // Get the "Handle" (ID) of this window
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
+            hwnd = new WindowInteropHelper(this).Handle;
 
             // Get the current style
             int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
@@ -264,6 +318,42 @@ namespace WinHUD
                 // For now, just throw an exception
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             }
+
+            // Register Hotkey (Win + Shift + H)
+            bool success = RegisterHotKey(hwnd, HOTKEY_ID, SELECTED_MODIFIERS, SELECTED_KEY);
+            if (!success)
+            {
+                /// If this pops up, the key is already taken!
+                MessageBox.Show($"Could not register hotkey (Error {Marshal.GetLastWin32Error()}).\nTry changing the key combination in code.", "WinHUD Error");
+            }
+
+            // 4. Add Hook to listen for keypress
+            HwndSource source = HwndSource.FromHwnd(hwnd);
+            source.AddHook(HwndHook);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // Unregister to be polite to other apps
+            UnregisterHotKey(hwnd, HOTKEY_ID);
+            base.OnClosed(e);
+        }
+
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // Listen for the Hotkey Message
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            {
+                // Toggle Manual State
+                _manualShow = !_manualShow;
+
+                // Beep to confirm (Optional, good for debugging)
+                // System.Media.SystemSounds.Beep.Play(); 
+
+                handled = true;
+            }
+
+            return IntPtr.Zero;
         }
     }
 }
