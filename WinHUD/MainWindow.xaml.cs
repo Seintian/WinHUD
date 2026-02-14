@@ -148,6 +148,7 @@ namespace WinHUD
             if (_monitor == null) return;
 
             CpuText.Text = $"CPU: {_monitor.GetCpuUsage()}";
+            GpuText.Text = _monitor.GetGpuUsage();
             RamText.Text = $"RAM: {_monitor.GetRamUsage()}";
             DiskText.Text = $"Disk: {_monitor.GetTotalDiskSpeed()}";
             NetText.Text = $"Net: {_monitor.GetNetworkSpeed()}";
@@ -175,6 +176,8 @@ namespace WinHUD
         {
             // Cleanup Tray Icon
             _trayService?.Dispose();
+            // Cleanup Performance Monitor
+            _monitor?.Dispose();
 
             NativeMethods.UnregisterHotKey(_windowHandle, 9000);
             base.OnClosed(e);

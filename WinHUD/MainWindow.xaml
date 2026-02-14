@@ -27,6 +27,16 @@
                     <DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
                 </TextBlock.Effect>
             </TextBlock>
+			<TextBlock Name="GpuText"
+                Text="GPU: 0%"
+                FontSize="12"
+                FontWeight="Bold"
+                FontFamily="Consolas"
+                Foreground="Green">
+				<TextBlock.Effect>
+					<DropShadowEffect ShadowDepth="0" Color="Black" BlurRadius="5" Opacity="1"/>
+				</TextBlock.Effect>
+			</TextBlock>
             <TextBlock x:Name="RamText"
                 Text="RAM: 0%"
                 FontSize="12" 
