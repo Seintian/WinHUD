@@ -15,10 +15,13 @@ namespace WinHUD.Services
             _onMonitorSelected = onMonitorSelected;
             _onExit = onExit;
 
+            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "logo-w-bg.ico");
+
             // Initialize the Tray Icon
             _notifyIcon = new NotifyIcon
             {
-                Icon = SystemIcons.Application, // Default App Icon
+                // Load custom icon if available, otherwise fallback to default application icon
+                Icon = System.IO.File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application,
                 Visible = true,
                 Text = "WinHUD"
             };
