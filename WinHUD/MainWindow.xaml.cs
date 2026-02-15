@@ -27,42 +27,92 @@ namespace WinHUD
         private bool _isManualOverride = false;
         private IntPtr _windowHandle;
 
+        // --- CONFIG STATE ---
+        private AppConfig _config;
         // Default to Primary Screen initially
         private WinFormsScreen? _targetScreen = WinFormsScreen.PrimaryScreen;
 
         public MainWindow()
         {
             InitializeComponent();
-            StartupManager.EnsureAppRunsAtStartup();
 
-            // 1. Initialize Services
-            InitializePerformanceMonitor();
-            _contrastService = new BackgroundAnalyzer();
+            // 1. Startup Logic
+            try { StartupManager.EnsureAppRunsAtStartup(); }
+            catch (Exception ex) { Debug.WriteLine($"[Main] Startup registration failed: {ex.Message}"); }
 
-            // Initialize Tray Icon with callbacks: (OnMonitorSelected, OnExit)
-            _trayService = new TrayService(
-                onMonitorSelected: (screen) =>
+            // 2. Load Configuration
+            _config = ConfigPersistence.Load();
+
+            // 3. Restore Monitor Selection
+            try
+            {
+                // Find screen by saved DeviceName (e.g., \\.\DISPLAY1)
+                _targetScreen = WinFormsScreen.AllScreens
+                    .FirstOrDefault(s => s.DeviceName == _config.TargetMonitorDeviceName);
+
+                // Fallback if monitor disconnected or config empty
+                if (_targetScreen == null)
                 {
-                    _targetScreen = screen;
-                    // If window is visible, move it immediately to the new screen
-                    if (this.Opacity > 0) SnapToTargetScreen();
-                },
-                onExit: () =>
-                {
-                    System.Windows.Application.Current.Shutdown();
+                    Debug.WriteLine("[Main] Configured monitor not found, defaulting to Primary.");
+                    _targetScreen = WinFormsScreen.PrimaryScreen;
                 }
-            );
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error restoring monitor: {ex.Message}");
+                _targetScreen = WinFormsScreen.PrimaryScreen;
+            }
 
-            // 2. Setup Timer
+            // 4. Initialize Services
+            InitializePerformanceMonitor();
+
+            try { _contrastService = new BackgroundAnalyzer(); }
+            catch (Exception ex) { Debug.WriteLine($"[Main] Contrast service init failed: {ex.Message}"); }
+
+            // 5. Initialize Tray (Pass the current screen name for the checkmark)
+            try
+            {
+                _trayService = new TrayService(
+                    onMonitorSelected: HandleMonitorSelection,
+                    onExit: () => System.Windows.Application.Current.Shutdown(),
+                    initialDeviceName: _targetScreen?.DeviceName ?? ""
+                );
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Tray service init failed: {ex.Message}");
+            }
+
+            // 6. Setup Timer
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _timer.Tick += OnGameLoopTick;
 
-            // 3. Setup Anchor Logic (Keep window at bottom when text grows)
             this.SizeChanged += OnWindowSizeChanged;
-
-            // Start State
             this.Opacity = 0;
             _timer.Start();
+        }
+
+        private void HandleMonitorSelection(WinFormsScreen screen)
+        {
+            try
+            {
+                Debug.WriteLine($"[Main] Monitor selected: {screen.DeviceName}");
+                _targetScreen = screen;
+
+                // SAVE CONFIG
+                _config.TargetMonitorDeviceName = screen.DeviceName;
+                ConfigPersistence.Save(_config);
+
+                // Update Tray Checkmark
+                _trayService?.UpdateSelectedMonitor(screen.DeviceName);
+
+                // Move Window immediately if visible
+                if (this.Opacity > 0) SnapToTargetScreen();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error handling monitor selection: {ex.Message}");
+            }
         }
 
         private void InitializePerformanceMonitor()
@@ -73,7 +123,9 @@ namespace WinHUD
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Failed to init counters: {ex.Message}");
+                // This is critical, so we might want to show a MessageBox or just log heavily
+                Debug.WriteLine($"[Main] FATAL: Failed to init counters: {ex}");
+                System.Windows.MessageBox.Show($"Performance Counters failed: {ex.Message}");
             }
         }
 
@@ -81,24 +133,32 @@ namespace WinHUD
 
         private void OnGameLoopTick(object? sender, EventArgs e)
         {
-            bool isGameActive = GameDetector.IsProcessRunning(TargetProcess);
-            bool shouldShow = isGameActive || _isManualOverride;
-
-            if (shouldShow)
+            try
             {
-                ShowWindow();
-                UpdateUI();
 
-                // Analyze background for contrast and update text color accordingly
-                UpdateContrast();
+                bool isGameActive = GameDetector.IsProcessRunning(TargetProcess);
+                bool shouldShow = isGameActive || _isManualOverride;
+
+                if (shouldShow)
+                {
+                    ShowWindow();
+                    UpdateUI();
+
+                    // Analyze background for contrast and update text color accordingly
+                    UpdateContrast();
+                }
+                else
+                {
+                    HideWindow();
+                }
             }
-            else
+            catch (Exception ex)
             {
-                HideWindow();
+                Debug.WriteLine($"[Main] Error in game loop: {ex.Message}");
             }
         }
 
-        // --- VISIBILITY & POSITIONING ---
+        // --- LOGIC METHODS ---
 
         private void ShowWindow()
         {
@@ -124,73 +184,98 @@ namespace WinHUD
         private void SnapToTargetScreen()
         {
             if (_targetScreen == null) return;
+            try
+            {
+                // Get Working Area of the user-selected screen
+                var workArea = _targetScreen.WorkingArea;
 
-            // Get Working Area of the user-selected screen
-            var workArea = _targetScreen.WorkingArea;
-
-            // Calculate Position (Bottom-Left)
-            // Note: We use WPF coordinates, but WinForms Screen returns pixels. 
-            // In 99% of cases (100% DPI), they match. Handling DPI mixing is complex, 
-            // but this works for standard setups.
-            this.Left = workArea.Left + 10;
-            this.Top = workArea.Bottom - this.ActualHeight - 10;
+                // Calculate Position (Bottom-Left)
+                // Note: We use WPF coordinates, but WinForms Screen returns pixels. 
+                // In 99% of cases (100% DPI), they match. Handling DPI mixing is complex, 
+                // but this works for standard setups.
+                this.Left = workArea.Left + 10;
+                this.Top = workArea.Bottom - this.ActualHeight - 10;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error snapping to screen: {ex.Message}");
+            }
         }
 
         private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // When text size changes, re-anchor to the bottom of the CURRENT target screen
-            // NOTE: `screen` is a safe copy of the nullable _targetScreen
-            if (this.Opacity > 0 && _targetScreen is { } screen)
+            try
             {
-                var workArea = screen.WorkingArea;
-                this.Left = workArea.Left + 10;
-                this.Top = workArea.Bottom - this.ActualHeight - 10;
+                // When text size changes, re-anchor to the bottom of the CURRENT target screen
+                // NOTE: `screen` is a safe copy of the nullable _targetScreen
+                if (this.Opacity > 0 && _targetScreen is { } screen)
+                {
+                    var workArea = screen.WorkingArea;
+                    this.Left = workArea.Left + 10;
+                    this.Top = workArea.Bottom - this.ActualHeight - 10;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error resizing: {ex.Message}");
             }
         }
 
         private void UpdateContrast()
         {
             if (_contrastService == null || this.Opacity < 1) return;
+            try
+            {
+                // 1. GET DPI SCALING FACTOR
+                // WPF coordinates (Left/Top) are different from Screen Pixels if scaling is > 100%
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget == null) return;
 
-            // 1. GET DPI SCALING FACTOR
-            // WPF coordinates (Left/Top) are different from Screen Pixels if scaling is > 100%
-            var source = PresentationSource.FromVisual(this);
-            if (source?.CompositionTarget == null) return;
+                double dpiX = source.CompositionTarget.TransformToDevice.M11;
+                double dpiY = source.CompositionTarget.TransformToDevice.M22;
 
-            double dpiX = source.CompositionTarget.TransformToDevice.M11;
-            double dpiY = source.CompositionTarget.TransformToDevice.M22;
+                // 2. CONVERT TO PHYSICAL PIXELS
+                int pixelLeft = (int)(this.Left * dpiX);
+                int pixelTop = (int)(this.Top * dpiY);
+                int pixelWidth = (int)(this.ActualWidth * dpiX);
 
-            // 2. CONVERT TO PHYSICAL PIXELS
-            int pixelLeft = (int)(this.Left * dpiX);
-            int pixelTop = (int)(this.Top * dpiY);
-            int pixelWidth = (int)(this.ActualWidth * dpiX);
+                // 3. APPLY "PERISCOPE" OFFSET
+                // Look 20 pixels ABOVE the window to avoid capturing the window itself (which looks black)
+                // We sample the center-top area
+                int sampleX = pixelLeft + (pixelWidth / 2);
+                int sampleY = pixelTop - 20;
 
-            // 3. APPLY "PERISCOPE" OFFSET
-            // Look 20 pixels ABOVE the window to avoid capturing the window itself (which looks black)
-            // We sample the center-top area
-            int sampleX = pixelLeft + (pixelWidth / 2);
-            int sampleY = pixelTop - 20;
+                // Safety: Ensure we don't capture off-screen (negative Y)
+                if (sampleY < 0) sampleY = 0;
 
-            // Safety: Ensure we don't capture off-screen (negative Y)
-            if (sampleY < 0) sampleY = 0;
+                // 4. GET COLOR
+                var optimalBrush = _contrastService.GetOptimalTextColor(sampleX, sampleY);
 
-            // 4. GET COLOR
-            var optimalBrush = _contrastService.GetOptimalTextColor(sampleX, sampleY);
-
-            // 5. APPLY
-            System.Windows.Documents.TextElement.SetForeground(Container, optimalBrush);
+                // 5. APPLY
+                System.Windows.Documents.TextElement.SetForeground(Container, optimalBrush);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error updating contrast: {ex.Message}");
+            }
         }
 
         private void UpdateUI()
         {
             if (_monitor == null) return;
-
-            CpuText.Text = $"CPU: {_monitor.GetCpuUsage()}";
-            GpuText.Text = _monitor.GetGpuUsage();
-            RamText.Text = $"RAM: {_monitor.GetRamUsage()}";
-            DiskText.Text = $"Disk: {_monitor.GetTotalDiskSpeed()}";
-            NetText.Text = $"Net: {_monitor.GetNetworkSpeed()}";
-            DiskListText.Text = _monitor.GetDiskLoadSummary();
+            try
+            {
+                CpuText.Text = $"CPU: {_monitor.GetCpuUsage()}";
+                GpuText.Text = _monitor.GetGpuUsage();
+                RamText.Text = $"RAM: {_monitor.GetRamUsage()}";
+                DiskText.Text = $"Disk: {_monitor.GetTotalDiskSpeed()}";
+                NetText.Text = $"Net: {_monitor.GetNetworkSpeed()}";
+                DiskListText.Text = _monitor.GetDiskLoadSummary();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error updating UI: {ex.Message}"); 
+            }
         }
 
         // --- WINDOW SETUP (Native Methods) ---
@@ -198,26 +283,44 @@ namespace WinHUD
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
-            _windowHandle = new WindowInteropHelper(this).Handle;
+            try
+            {
+                _windowHandle = new WindowInteropHelper(this).Handle;
 
-            // 1. Make Transparent & Ghost
-            NativeMethods.SetWindowGhostMode(_windowHandle);
+                // 1. Make Transparent & Ghost
+                NativeMethods.SetWindowGhostMode(_windowHandle);
 
-            // 2. Register Hotkey (Alt + Shift + H)
-            NativeMethods.RegisterHotKey(_windowHandle, 9000, 5, 0x48);
+                // 2. Register Hotkey (Alt + Shift + H)
+                bool success = NativeMethods.RegisterHotKey(_windowHandle, 9000, 5, 0x48);
+                if (!success)
+                {
+                    Debug.WriteLine("[Main] Failed to register hotkey (ALt+Shift+H).");
+                }
 
-            // 3. Listen for Hotkey
-            HwndSource.FromHwnd(_windowHandle).AddHook(HwndHook);
+                // 3. Listen for Hotkey
+                HwndSource.FromHwnd(_windowHandle).AddHook(HwndHook);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error in OnSourceInitialized (Native Setup): {ex.Message}");
+            }
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            // Cleanup Tray Icon
-            _trayService?.Dispose();
-            // Cleanup Performance Monitor
-            _monitor?.Dispose();
+            try
+            {
+                // Cleanup Tray Icon
+                _trayService?.Dispose();
+                // Cleanup Performance Monitor
+                _monitor?.Dispose();
 
-            NativeMethods.UnregisterHotKey(_windowHandle, 9000);
+                NativeMethods.UnregisterHotKey(_windowHandle, 9000);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error during shutdown: {ex.Message}");
+            }
             base.OnClosed(e);
         }
 
@@ -226,6 +329,7 @@ namespace WinHUD
             if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == 9000)
             {
                 _isManualOverride = !_isManualOverride;
+                Debug.WriteLine($"[Main] Manual Override toggled: {_isManualOverride}"); 
                 handled = true;
             }
             return IntPtr.Zero;

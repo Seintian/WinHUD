@@ -48,10 +48,13 @@ namespace WinHUD.Services
                 string startMenuPath = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
                 string shortcutPath = Path.Combine(startMenuPath, $"{AppName}.lnk");
 
+                string workingDirectory = Path.GetDirectoryName(exePath) ?? "";
+
                 if (!File.Exists(shortcutPath))
                 {
                     // Escape single quotes for PowerShell (replace ' with '')
                     string safeExePath = exePath.Replace("'", "''");
+                    string safeWorkingDir = workingDirectory.Replace("'", "''");
                     string safeShortcutPath = shortcutPath.Replace("'", "''");
 
                     // PowerShell command to create the shortcut using WScript.Shell
@@ -59,6 +62,7 @@ namespace WinHUD.Services
                         $"$ws = New-Object -ComObject WScript.Shell; " +
                         $"$s = $ws.CreateShortcut('{safeShortcutPath}'); " +
                         $"$s.TargetPath = '{safeExePath}'; " +
+                        $"$s.WorkingDirectory = '{safeWorkingDir}'; " +
                         $"$s.Description = 'WinHUD Overlay'; " +
                         $"$s.Save()";
 

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -10,64 +11,129 @@ namespace WinHUD.Services
         private readonly Action<Screen> _onMonitorSelected;
         private readonly Action _onExit;
 
-        public TrayService(Action<Screen> onMonitorSelected, Action onExit)
+        // Track the currently selected monitor ID (DeviceName)
+        private string _selectedDeviceName;
+
+        public TrayService(Action<Screen> onMonitorSelected, Action onExit, string initialDeviceName)
         {
             _onMonitorSelected = onMonitorSelected;
             _onExit = onExit;
+            _selectedDeviceName = initialDeviceName;
 
-            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "logo-w-bg.ico");
-
-            // Initialize the Tray Icon
             _notifyIcon = new NotifyIcon
             {
-                // Load custom icon if available, otherwise fallback to default application icon
-                Icon = System.IO.File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application,
-                Visible = true,
+                Visible = false, // Will set true after setup
                 Text = "WinHUD"
             };
 
+            try
+            {
+                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "logo-w-bg.ico");
+                if (System.IO.File.Exists(iconPath))
+                {
+                    _notifyIcon.Icon = new Icon(iconPath);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TrayService] Custom icon not found at {iconPath}, using default application icon.");
+                    _notifyIcon.Icon = SystemIcons.Application;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Tray] Error loading icon: {ex.Message}");
+                _notifyIcon.Icon = SystemIcons.Application;
+            }
+
             // Build the Right-Click Menu
+            RebuildContextMenu();
+            _notifyIcon.Visible = true;
+        }
+
+        public void UpdateSelectedMonitor(string deviceName)
+        {
+            _selectedDeviceName = deviceName;
             RebuildContextMenu();
         }
 
         private void RebuildContextMenu()
         {
-            var contextMenu = new ContextMenuStrip();
-
-            // 1. Add Header
-            var header = new ToolStripMenuItem("Select Monitor") { Enabled = false };
-            contextMenu.Items.Add(header);
-            contextMenu.Items.Add(new ToolStripSeparator());
-
-            // 2. Add Dynamic List of Screens
-            int index = 1;
-            foreach (var screen in Screen.AllScreens)
+            try
             {
-                // Example: "Monitor 1 (1920x1080) - Primary"
-                string label = $"Monitor {index++} ({screen.Bounds.Width}x{screen.Bounds.Height})";
-                if (screen.Primary) label += " - Primary";
+                var contextMenu = new ContextMenuStrip();
 
-                var item = new ToolStripMenuItem(label);
+                // 1. Add Header
+                var header = new ToolStripMenuItem("Select Monitor") { Enabled = false };
+                contextMenu.Items.Add(header);
+                contextMenu.Items.Add(new ToolStripSeparator());
 
-                // Click Action: Trigger callback with this specific screen
-                item.Click += (s, e) => _onMonitorSelected?.Invoke(screen);
+                // 2. Add Dynamic List of Screens
+                int index = 1;
+                foreach (var screen in Screen.AllScreens)
+                {
+                    // Example: "Monitor 1 (1920x1080) - Primary"
+                    string label = $"Monitor {index++} ({screen.Bounds.Width}x{screen.Bounds.Height})";
+                    if (screen.Primary) label += " - Primary";
 
-                contextMenu.Items.Add(item);
+                    var item = new ToolStripMenuItem(label);
+
+                    // Logic: Check the item if it matches our config
+                    if (screen.DeviceName == _selectedDeviceName)
+                    {
+                        item.Checked = true;
+                    }
+
+                    // Click Action: Trigger callback with this specific screen
+                    item.Click += (s, e) =>
+                    {
+                        try
+                        {
+                            _onMonitorSelected?.Invoke(screen);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[Tray] Error in monitor selection callback: {ex.Message}");
+                        }
+                    };
+
+                    contextMenu.Items.Add(item);
+                }
+
+                // 3. Add Exit
+                contextMenu.Items.Add(new ToolStripSeparator());
+                var exitItem = new ToolStripMenuItem("Exit");
+                exitItem.Click += (s, e) =>
+                {
+                    try
+                    {
+                        _onExit?.Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[Tray] Error in Exit callback: {ex.Message}");
+                    }
+                };
+                contextMenu.Items.Add(exitItem);
+
+                _notifyIcon.ContextMenuStrip = contextMenu;
             }
-
-            // 3. Add Exit
-            contextMenu.Items.Add(new ToolStripSeparator());
-            var exitItem = new ToolStripMenuItem("Exit");
-            exitItem.Click += (s, e) => _onExit?.Invoke();
-            contextMenu.Items.Add(exitItem);
-
-            _notifyIcon.ContextMenuStrip = contextMenu;
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Tray] Error building context menu: {ex.Message}");
+            }
         }
 
         public void Dispose()
         {
-            _notifyIcon.Visible = false;
-            _notifyIcon.Dispose();
+            try
+            {
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Tray] Error disposing icon: {ex.Message}");
+            }
         }
     }
 }
