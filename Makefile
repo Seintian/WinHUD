@@ -4,8 +4,9 @@ PROJECT_DIR := WinHUD
 PROJECT_FILE := $(PROJECT_DIR)/WinHUD.csproj
 
 # 1. STRICT: Get CURRENT version from the .csproj file
-# We use PowerShell here because it's reliable for XML parsing on Windows.
-v := $(shell powershell -NoProfile -Command "& { [xml]$$xml = Get-Content '$(PROJECT_FILE)'; if ($$xml.Project.PropertyGroup.Version) { $$xml.Project.PropertyGroup.Version } else { exit 1 } }")
+# FIX APPLIED: We use '\$$xml' so that Bash passes literal '$xml' to PowerShell.
+# We also pipe to "tr -d '\r'" to ensure no invisible Windows carriage returns break file names.
+v := $(shell powershell -NoProfile -Command "& { [xml]\$$xml = Get-Content '$(PROJECT_FILE)'; if (\$$xml.Project.PropertyGroup.Version) { \$$xml.Project.PropertyGroup.Version } else { exit 1 } }" | tr -d '\r')
 
 # Check validity
 ifeq ($(v),)
