@@ -4,13 +4,12 @@ PROJECT_DIR := WinHUD
 PROJECT_FILE := $(PROJECT_DIR)/WinHUD.csproj
 
 # 1. STRICT: Get CURRENT version from the .csproj file
-# This is now the ONLY source of truth.
-# If <Version> is missing, exit 1 (Hard Failure)
+# We use PowerShell here because it's reliable for XML parsing on Windows.
 v := $(shell powershell -NoProfile -Command "& { [xml]$$xml = Get-Content '$(PROJECT_FILE)'; if ($$xml.Project.PropertyGroup.Version) { $$xml.Project.PropertyGroup.Version } else { exit 1 } }")
 
 # Check validity
 ifeq ($(v),)
-$(error [FATAL] Could not detect <Version> in '$(PROJECT_FILE)'. Please manually update the .csproj file with the desired version before releasing.)
+$(error [FATAL] Could not detect <Version> in '$(PROJECT_FILE)'. Please manually update the .csproj file.)
 endif
 
 # --- Professional Naming Conventions ---
@@ -18,10 +17,7 @@ ARCH := win-x64
 DIST_DIR := dist
 
 # Artifact Naming
-# The Portable folder (e.g., dist/WinHUD-v0.1.0-win-x64)
 PORTABLE_DIR := $(DIST_DIR)/WinHUD-v$(v)-$(ARCH)
-
-# The Single File temp folder
 SINGLE_TEMP_DIR := $(DIST_DIR)/tmp_single
 
 # Final Artifact Files
@@ -36,7 +32,7 @@ all: clean build-single package
 
 # --- Help ---
 help:
-	@echo "WinHUD Manual Builder"
+	@echo "WinHUD Manual Builder (Bash)"
 	@echo "Detected Version: $(v)"
 	@echo "Arch:             $(ARCH)"
 	@echo ""
@@ -48,31 +44,31 @@ help:
 
 clean:
 	@echo "[+] Cleaning artifacts..."
-	@if exist "$(DIST_DIR)" rmdir /s /q "$(DIST_DIR)"
-	@dotnet clean $(PROJECT_FILE) -v q
+	@rm -rf "$(DIST_DIR)"
+	@dotnet clean "$(PROJECT_FILE)" -v q
 
 build-single:
 	@echo "[+] Building Single File Executable (Version: $(v))..."
-	@dotnet publish $(PROJECT_FILE) -c Release -r $(ARCH) \
+	@dotnet publish "$(PROJECT_FILE)" -c Release -r $(ARCH) \
 		--self-contained true \
 		-p:PublishSingleFile=true \
 		-p:IncludeNativeLibrariesForSelfExtract=true \
 		-p:PublishReadyToRun=true \
 		-p:Version=$(v) \
-		-o $(SINGLE_TEMP_DIR)
+		-o "$(SINGLE_TEMP_DIR)"
 	
 	@echo "[+] Renaming and moving executable..."
-	@if not exist "$(DIST_DIR)" mkdir "$(DIST_DIR)"
-	@copy "$(SINGLE_TEMP_DIR)\WinHUD.exe" "$(ARTIFACT_EXE)" > nul
+	@mkdir -p "$(DIST_DIR)"
+	@cp "$(SINGLE_TEMP_DIR)/WinHUD.exe" "$(ARTIFACT_EXE)"
 	@echo "    -> Created: $(ARTIFACT_EXE)"
-	@rmdir /s /q "$(SINGLE_TEMP_DIR)"
+	@rm -rf "$(SINGLE_TEMP_DIR)"
 
 build-portable:
 	@echo "[+] Building Portable Directory (Version: $(v))..."
-	@dotnet publish $(PROJECT_FILE) -c Release -r $(ARCH) \
+	@dotnet publish "$(PROJECT_FILE)" -c Release -r $(ARCH) \
 		--self-contained true \
 		-p:Version=$(v) \
-		-o $(PORTABLE_DIR)
+		-o "$(PORTABLE_DIR)"
 
 package: build-portable
 	@echo "[+] Packaging Archives..."
@@ -82,15 +78,16 @@ package: build-portable
 	@echo "      -> Created: $(ARTIFACT_ZIP)"
 	
 	@echo "    - Creating TAR.GZ..."
-	@tar -czvf $(ARTIFACT_TAR) -C $(DIST_DIR) WinHUD-v$(v)-$(ARCH)
+	@tar -czvf "$(ARTIFACT_TAR)" -C "$(DIST_DIR)" "WinHUD-v$(v)-$(ARCH)"
 	@echo "      -> Created: $(ARTIFACT_TAR)"
 
 release: clean all
 	@echo "[+] Publishing Release v$(v) to Git..."
-	@git add $(PROJECT_FILE)
-	@git commit -m "chore: release v$(v)" || echo "Nothing to commit (version might be already committed)"
-	@git tag -a v$(v) -m "Release v$(v)"
-	@git push origin v$(v)
+	@echo "    (Ensuring code matches version $(v))"
+	@git add "$(PROJECT_FILE)"
+	@git commit -m "chore: release v$(v)" || echo "Nothing to commit"
+	@git tag -a "v$(v)" -m "Release v$(v)"
+	@git push origin "v$(v)"
 	@git push
 	@echo "---------------------------------------------------"
 	@echo "SUCCESS! Release v$(v) is ready."
