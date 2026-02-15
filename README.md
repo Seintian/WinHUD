@@ -81,7 +81,7 @@ This project includes a comprehensive `Makefile` to handle versioning, building,
 1.  **Clone the repository:**
 
     ```bash
-    git clone [https://github.com/yourusername/WinHUD.git](https://github.com/yourusername/WinHUD.git)
+    git clone https://github.com/Seintian/WinHUD.git
     cd WinHUD
     ```
 
