@@ -15,11 +15,12 @@ namespace WinHUD
     public partial class MainWindow : Window
     {
         // --- CONFIG ---
-        private const string TargetProcess = "gameoverlayui64"; // or "Notepad" for testing
+        private const string TargetProcess = "gameoverlayui64";
 
         // --- SERVICES ---
         private PerformanceMonitor? _monitor;
         private TrayService? _trayService;
+        private BackgroundAnalyzer? _contrastService;
         private readonly DispatcherTimer _timer;
 
         // --- STATE ---
@@ -36,6 +37,7 @@ namespace WinHUD
 
             // 1. Initialize Services
             InitializePerformanceMonitor();
+            _contrastService = new BackgroundAnalyzer();
 
             // Initialize Tray Icon with callbacks: (OnMonitorSelected, OnExit)
             _trayService = new TrayService(
@@ -86,6 +88,9 @@ namespace WinHUD
             {
                 ShowWindow();
                 UpdateUI();
+
+                // Analyze background for contrast and update text color accordingly
+                UpdateContrast();
             }
             else
             {
@@ -141,6 +146,39 @@ namespace WinHUD
                 this.Left = workArea.Left + 10;
                 this.Top = workArea.Bottom - this.ActualHeight - 10;
             }
+        }
+
+        private void UpdateContrast()
+        {
+            if (_contrastService == null || this.Opacity < 1) return;
+
+            // 1. GET DPI SCALING FACTOR
+            // WPF coordinates (Left/Top) are different from Screen Pixels if scaling is > 100%
+            var source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget == null) return;
+
+            double dpiX = source.CompositionTarget.TransformToDevice.M11;
+            double dpiY = source.CompositionTarget.TransformToDevice.M22;
+
+            // 2. CONVERT TO PHYSICAL PIXELS
+            int pixelLeft = (int)(this.Left * dpiX);
+            int pixelTop = (int)(this.Top * dpiY);
+            int pixelWidth = (int)(this.ActualWidth * dpiX);
+
+            // 3. APPLY "PERISCOPE" OFFSET
+            // Look 20 pixels ABOVE the window to avoid capturing the window itself (which looks black)
+            // We sample the center-top area
+            int sampleX = pixelLeft + (pixelWidth / 2);
+            int sampleY = pixelTop - 20;
+
+            // Safety: Ensure we don't capture off-screen (negative Y)
+            if (sampleY < 0) sampleY = 0;
+
+            // 4. GET COLOR
+            var optimalBrush = _contrastService.GetOptimalTextColor(sampleX, sampleY);
+
+            // 5. APPLY
+            System.Windows.Documents.TextElement.SetForeground(Container, optimalBrush);
         }
 
         private void UpdateUI()
