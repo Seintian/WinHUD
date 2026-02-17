@@ -14,11 +14,11 @@ namespace WinHUD.Services
             try
             {
                 // 1. Get current executable path
-                string exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+                string exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
                 if (string.IsNullOrEmpty(exePath)) return;
 
                 // 2. Register in Registry (Run at Startup)
-                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
                 {
                     if (key != null)
                     {
