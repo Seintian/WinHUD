@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Reflection;
 
 namespace WinHUD.Services
 {
@@ -28,16 +29,10 @@ namespace WinHUD.Services
 
             try
             {
-                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "logo-w-bg.ico");
-                if (System.IO.File.Exists(iconPath))
-                {
-                    _notifyIcon.Icon = new Icon(iconPath);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[TrayService] Custom icon not found at {iconPath}, using default application icon.");
-                    _notifyIcon.Icon = SystemIcons.Application;
-                }
+                var assembly = Assembly.GetExecutingAssembly();
+                using var stream = assembly.GetManifestResourceStream("WinHUD.assets.logo-w-bg.ico");
+
+                _notifyIcon.Icon = stream != null ? new Icon(stream) : SystemIcons.Application;
             }
             catch (Exception ex)
             {

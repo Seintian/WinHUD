@@ -186,15 +186,29 @@ namespace WinHUD
             if (_targetScreen == null) return;
             try
             {
-                // Get Working Area of the user-selected screen
+                // 1. Get DPI Scale Factor (Default to 1.0 if not found)
+                double dpiX = 1.0;
+                double dpiY = 1.0;
+
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget != null)
+                {
+                    dpiX = source.CompositionTarget.TransformToDevice.M11;
+                    dpiY = source.CompositionTarget.TransformToDevice.M22;
+                }
+
+                // 2. Get Working Area (Physical Pixels)
                 var workArea = _targetScreen.WorkingArea;
 
-                // Calculate Position (Bottom-Left)
-                // Note: We use WPF coordinates, but WinForms Screen returns pixels. 
-                // In 99% of cases (100% DPI), they match. Handling DPI mixing is complex, 
-                // but this works for standard setups.
-                this.Left = workArea.Left + 10;
-                this.Top = workArea.Bottom - this.ActualHeight - 10;
+                // 3. Convert Pixels -> WPF Units (DIPs)
+                // Formula: Units = Pixels / Scale
+                double leftDips = workArea.Left / dpiX;
+                double bottomDips = workArea.Bottom / dpiY;
+
+                // 4. Calculate Position
+                // We anchor to the Bottom-Left
+                this.Left = leftDips + 10;
+                this.Top = bottomDips - this.ActualHeight - 10;
             }
             catch (Exception ex)
             {
