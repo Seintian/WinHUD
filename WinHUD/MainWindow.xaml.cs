@@ -24,7 +24,6 @@ namespace WinHUD
         private readonly DispatcherTimer _timer;
 
         // --- STATE ---
-        private bool _isManualOverride = false;
         private IntPtr _windowHandle;
 
         // --- CONFIG STATE ---
@@ -43,7 +42,7 @@ namespace WinHUD
             // 2. Load Configuration
             _config = ConfigPersistence.Load();
 
-            // 3. Restore Monitor Selection and Forced Overlay State
+            // 3. Restore Monitor Selection
             try
             {
                 // Find screen by saved DeviceName (e.g., \\.\DISPLAY1)
@@ -61,12 +60,6 @@ namespace WinHUD
             {
                 Debug.WriteLine($"[Main] Error restoring monitor: {ex.Message}");
                 _targetScreen = WinFormsScreen.PrimaryScreen;
-            }
-
-            _isManualOverride = _config.IsOverlayForced;
-            if (_isManualOverride)
-            {
-                Debug.WriteLine("[Main] Manual override enabled from config.");
             }
 
             // 4. Initialize Services
@@ -141,16 +134,18 @@ namespace WinHUD
         {
             try
             {
-
                 bool isGameActive = GameDetector.IsProcessRunning(TargetProcess);
-                bool shouldShow = isGameActive || _isManualOverride;
+                bool shouldShow = _config.Mode switch
+                {
+                    OverlayMode.ForceShow => true,  // Always show
+                    OverlayMode.ForceHide => false, // Always hide
+                    _ => isGameActive               // Auto (Default)
+                };
 
                 if (shouldShow)
                 {
                     ShowWindow();
                     UpdateUI();
-
-                    // Analyze background for contrast and update text color accordingly
                     UpdateContrast();
                 }
                 else
@@ -348,20 +343,32 @@ namespace WinHUD
         {
             if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == 9000)
             {
-                _isManualOverride = !_isManualOverride;
-                Debug.WriteLine($"[Main] Manual Override toggled: {_isManualOverride}"); 
-                handled = true;
+                bool isGameActive = GameDetector.IsProcessRunning(TargetProcess);
 
-                // Save config immediately
-                try
+                // 1. Determine if it is CURRENTLY visible
+                bool isCurrentlyVisible = _config.Mode == OverlayMode.ForceShow ||
+                                          (_config.Mode == OverlayMode.Auto && isGameActive);
+
+                if (isCurrentlyVisible)
                 {
-                    _config.IsOverlayForced = _isManualOverride;
-                    ConfigPersistence.Save(_config);
+                    // USER INTENT: HIDE
+                    // If game is active, we must Force Hide. If game is off, Auto (default hidden) is enough.
+                    _config.Mode = isGameActive ? OverlayMode.ForceHide : OverlayMode.Auto;
                 }
-                catch (Exception ex)
+                else
                 {
-                    Debug.WriteLine($"[Main] Error saving config on hotkey toggle: {ex.Message}");
+                    // USER INTENT: SHOW
+                    // If game is active, Auto (default shown) is enough. If game is off, we must Force Show.
+                    _config.Mode = isGameActive ? OverlayMode.Auto : OverlayMode.ForceShow;
                 }
+
+                Debug.WriteLine($"[Main] Toggled. New Mode: {_config.Mode}");
+
+                // Save and Apply Immediately
+                ConfigPersistence.Save(_config);
+                OnGameLoopTick(null, EventArgs.Empty);
+
+                handled = true;
             }
             return IntPtr.Zero;
         }
