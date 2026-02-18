@@ -43,7 +43,7 @@ namespace WinHUD
             // 2. Load Configuration
             _config = ConfigPersistence.Load();
 
-            // 3. Restore Monitor Selection
+            // 3. Restore Monitor Selection and Forced Overlay State
             try
             {
                 // Find screen by saved DeviceName (e.g., \\.\DISPLAY1)
@@ -61,6 +61,12 @@ namespace WinHUD
             {
                 Debug.WriteLine($"[Main] Error restoring monitor: {ex.Message}");
                 _targetScreen = WinFormsScreen.PrimaryScreen;
+            }
+
+            _isManualOverride = _config.IsOverlayForced;
+            if (_isManualOverride)
+            {
+                Debug.WriteLine("[Main] Manual override enabled from config.");
             }
 
             // 4. Initialize Services
@@ -345,6 +351,17 @@ namespace WinHUD
                 _isManualOverride = !_isManualOverride;
                 Debug.WriteLine($"[Main] Manual Override toggled: {_isManualOverride}"); 
                 handled = true;
+
+                // Save config immediately
+                try
+                {
+                    _config.IsOverlayForced = _isManualOverride;
+                    ConfigPersistence.Save(_config);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Main] Error saving config on hotkey toggle: {ex.Message}");
+                }
             }
             return IntPtr.Zero;
         }

@@ -9,6 +9,7 @@ namespace WinHUD.Services
     public class AppConfig
     {
         public string TargetMonitorDeviceName { get; set; } = string.Empty;
+        public bool IsOverlayForced { get; set; } = false;
     }
 
     public static class ConfigPersistence
