@@ -85,11 +85,22 @@ package: build-portable
 release: clean all
 	@echo "[+] Publishing Release v$(v) to Git..."
 	@echo "    (Ensuring code matches version $(v))"
-	@git add "$(PROJECT_FILE)"
+	
+	@# 1. Stage ALL changes (files + .csproj) so the Release Tag actually contains your code fixes
+	@git add .
+	
+	@# 2. Commit. If nothing changed, we echo a message but continue.
 	@git commit -m "chore: release v$(v)" || echo "Nothing to commit"
-	@git tag -a "v$(v)" -m "Release v$(v)"
-	@git push origin "v$(v)"
+	
+	@# 3. FORCE Tag (-f). This updates the tag if it exists, or creates it if new.
+	@git tag -fa "v$(v)" -m "Release v$(v)"
+	
+	@# 4. Push Commits first
 	@git push
+	
+	@# 5. FORCE Push Tag (-f). This updates the tag on GitHub even if it already exists.
+	@git push -f origin "v$(v)"
+	
 	@echo "---------------------------------------------------"
 	@echo "SUCCESS! Release v$(v) is ready."
 	@echo "Artifacts:"
