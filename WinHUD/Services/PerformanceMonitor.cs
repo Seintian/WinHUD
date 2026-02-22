@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
-using System.Text;
 using LibreHardwareMonitor.Hardware;
+using WinHUD.Models;
 
 namespace WinHUD.Services
 {
@@ -38,7 +38,6 @@ namespace WinHUD.Services
             _diskReadCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
             _diskWriteCounter = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
 
-            // Initialize individual disk counters for load summary
             _diskDrives = [];
             try
             {
@@ -69,7 +68,6 @@ namespace WinHUD.Services
             try
             {
                 _computer.Open();
-                // Find the first valid GPU (NVIDIA, AMD, or Intel)
                 _gpuHardware = _computer.Hardware
                     .FirstOrDefault(h => h.HardwareType == HardwareType.GpuNvidia
                                       || h.HardwareType == HardwareType.GpuAmd
@@ -80,51 +78,48 @@ namespace WinHUD.Services
                 Debug.WriteLine("[Monitor] Failed to open GPU hardware. Admin rights might be needed.");
             }
 
-            // Initialize network baseline
             var (initialRx, initialTx) = GetNetworkStats();
             _previousNetworkReceived = initialRx;
             _previousNetworkSent = initialTx;
         }
 
-        // --- GETTERS ---
+        // --- SINGLE GETTER ---
 
-        public string GetCpuUsage() => $"{_cpuCounter.NextValue():F1}%";
-
-        public string GetRamUsage() => $"{_ramCounter.NextValue():F0} MB";
-
-        // GPU Getter
-        public string GetGpuUsage()
+        public HardwareData GetLatestData()
         {
-            if (_gpuHardware == null) return "GPU: N/A";
+            var data = new HardwareData();
 
-            // We must call Update() to refresh sensors
-            _gpuHardware.Update();
+            // 1. CPU & RAM
+            data.CpuUsagePercent = _cpuCounter.NextValue();
+            data.RamAvailableMb = _ramCounter.NextValue();
 
-            // Find the "Load" sensor (specifically "GPU Core")
-            var loadSensor = _gpuHardware.Sensors
-                .FirstOrDefault(s => s.SensorType == SensorType.Load && s.Name == "GPU Core");
+            // 2. GPU
+            if (_gpuHardware != null)
+            {
+                _gpuHardware.Update();
+                var loadSensor = _gpuHardware.Sensors
+                    .FirstOrDefault(s => s.SensorType == SensorType.Load && s.Name == "GPU Core");
+                data.GpuUsagePercent = loadSensor?.Value ?? 0;
+            }
 
-            float value = loadSensor?.Value ?? 0;
-            return $"GPU: {value:F0}%";
-        }
+            // 3. Disk Total Speed
+            data.DiskReadBytesPerSec = _diskReadCounter.NextValue();
+            data.DiskWriteBytesPerSec = _diskWriteCounter.NextValue();
 
-        // Formatted Disk Read/Write
-        public string GetTotalDiskSpeed()
-        {
-            float readSpeed = _diskReadCounter.NextValue();
-            float writeSpeed = _diskWriteCounter.NextValue();
-            return $"↓ {FormatSpeed(readSpeed)} - ↑ {FormatSpeed(writeSpeed)}";
-        }
+            // 4. Individual Disk Loads
+            foreach (var (name, counter) in _diskDrives)
+            {
+                float usage = counter.NextValue();
+                if (usage > 100) usage = 100;
+                data.DiskLoads[name] = usage;
+            }
 
-        // Formatted Network Download/Upload
-        public string GetNetworkSpeed()
-        {
+            // 5. Network Speed
             var (currentRx, currentTx) = GetNetworkStats();
 
             long diffRx = currentRx - _previousNetworkReceived;
             long diffTx = currentTx - _previousNetworkSent;
 
-            // Handle first tick strike
             if (_isFirstNetworkCheck)
             {
                 diffRx = 0;
@@ -135,24 +130,14 @@ namespace WinHUD.Services
             _previousNetworkReceived = currentRx;
             _previousNetworkSent = currentTx;
 
-            return $"↓ {FormatSpeed(diffRx)} - ↑ {FormatSpeed(diffTx)}";
-        }
+            data.NetDownloadBytesPerSec = diffRx;
+            data.NetUploadBytesPerSec = diffTx;
 
-        public string GetDiskLoadSummary()
-        {
-            var sb = new StringBuilder();
-            foreach (var (name, counter) in _diskDrives)
-            {
-                float usage = counter.NextValue();
-                if (usage > 100) usage = 100;
-                sb.AppendLine($"Disk {name} - {usage:F0}%");
-            }
-            return sb.ToString().TrimEnd();
+            return data;
         }
 
         // --- HELPERS ---
 
-        // Returns a tuple separating Received (Rx) and Sent (Tx) bytes
         private static (long Received, long Sent) GetNetworkStats()
         {
             long rx = 0;
@@ -169,13 +154,6 @@ namespace WinHUD.Services
             }
 
             return (rx, tx);
-        }
-
-        private static string FormatSpeed(float bytes)
-        {
-            if (bytes < 1024) return $"{bytes:F0} B/s";
-            if (bytes < 1024 * 1024) return $"{bytes / 1024:F1} KB/s";
-            return $"{bytes / 1024 / 1024:F1} MB/s";
         }
 
         public void Dispose()

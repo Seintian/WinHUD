@@ -1,6 +1,7 @@
+using System.Collections.Generic;
+
 namespace WinHUD.Models
 {
-    // This class represents the hardware data that will be displayed in the HUD.
     public class HardwareData
     {
         public float CpuUsagePercent { get; set; }
@@ -12,5 +13,8 @@ namespace WinHUD.Models
 
         public long NetDownloadBytesPerSec { get; set; }
         public long NetUploadBytesPerSec { get; set; }
+
+        // Store individual disk loads as Key-Value pairs (e.g., "C:" -> 45.0)
+        public Dictionary<string, float> DiskLoads { get; set; } = new();
     }
 }
