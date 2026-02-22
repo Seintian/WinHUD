@@ -10,10 +10,17 @@ namespace WinHUD.Models.Nodes
     [JsonDerivedType(typeof(WidgetNode), "widget")]
     public abstract class OverlayNode : INotifyPropertyChanged
     {
-        public double MarginLeft { get; set; } = 0;
-        public double MarginTop { get; set; } = 0;
-        public double MarginRight { get; set; } = 0;
-        public double MarginBottom { get; set; } = 0;
+        private double _marginLeft = 0;
+        private double _marginTop = 0;
+
+        // Add default spacing so items aren't glued together
+        private double _marginRight = 15;
+        private double _marginBottom = 5;
+
+        public double MarginLeft { get => _marginLeft; set { _marginLeft = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }
+        public double MarginTop { get => _marginTop; set { _marginTop = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }
+        public double MarginRight { get => _marginRight; set { _marginRight = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }
+        public double MarginBottom { get => _marginBottom; set { _marginBottom = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }
 
         [JsonIgnore]
         public Thickness MarginThickness => new Thickness(MarginLeft, MarginTop, MarginRight, MarginBottom);

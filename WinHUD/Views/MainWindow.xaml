@@ -27,8 +27,10 @@
 
 		<DataTemplate DataType="{x:Type nodes:WidgetNode}">
 			<TextBlock FontSize="{Binding FontSize}" FontWeight="Bold" Margin="{Binding MarginThickness}">
+
 				<Run Text="{Binding PrefixText}" />
 				<Run x:Name="ValueRun" Text="--" />
+
 			</TextBlock>
 			<DataTemplate.Triggers>
 				<DataTrigger Binding="{Binding Type}" Value="Cpu">
@@ -46,14 +48,22 @@
 				<DataTrigger Binding="{Binding Type}" Value="Network">
 					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NetConverter}}" />
 				</DataTrigger>
+
 				<DataTrigger Binding="{Binding Type}" Value="DiskList">
-					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData.DiskLoads, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource DiskListConverter}}" />
+					<Setter TargetName="ValueRun" Property="Text">
+						<Setter.Value>
+							<MultiBinding Converter="{StaticResource DiskListConverter}">
+								<Binding Path="DataContext.CurrentData.DiskLoads" RelativeSource="{RelativeSource AncestorType=Window}" />
+								<Binding Path="DataContext.Direction" RelativeSource="{RelativeSource AncestorType=ItemsControl}" FallbackValue="Vertical" />
+							</MultiBinding>
+						</Setter.Value>
+					</Setter>
 				</DataTrigger>
 			</DataTemplate.Triggers>
 		</DataTemplate>
 
 		<DataTemplate DataType="{x:Type nodes:LayoutNode}">
-			<ItemsControl ItemsSource="{Binding Children}" Margin="{Binding MarginThickness}">
+			<ItemsControl ItemsSource="{Binding Children}">
 				<ItemsControl.ItemsPanel>
 					<ItemsPanelTemplate>
 						<StackPanel>

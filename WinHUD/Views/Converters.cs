@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Data;
 using WinHUD.Models;
+using WinHUD.Models.Nodes;
 
 namespace WinHUD.Views.Converters
 {
@@ -33,11 +34,20 @@ namespace WinHUD.Views.Converters
         public object ConvertBack(object v, Type t, object p, CultureInfo c) => throw new NotImplementedException();
     }
 
-    public class DiskListConverter : IValueConverter
+    // FIX: Upgraded to MultiValueConverter to read Layout Orientation!
+    public class DiskListConverter : IMultiValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-            value is Dictionary<string, float> dict ? string.Join("\n", dict.Select(kv => $"Disk {kv.Key} - {kv.Value:F0}%")) : "";
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (values.Length >= 2 && values[0] is Dictionary<string, float> dict && values[1] is LayoutDirection dir)
+            {
+                // If horizontal, separate disks with a pipe. If vertical, stack them with a newline.
+                string separator = dir == LayoutDirection.Horizontal ? "   |   " : "\n";
+                return string.Join(separator, dict.Select(kv => $"Disk {kv.Key} - {kv.Value:F0}%"));
+            }
+            return "";
+        }
 
-        public object ConvertBack(object v, Type t, object p, CultureInfo c) => throw new NotImplementedException();
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
 }
