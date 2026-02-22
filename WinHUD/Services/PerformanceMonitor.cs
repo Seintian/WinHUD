@@ -13,15 +13,19 @@ namespace WinHUD.Services
         // Native Counters
         private readonly PerformanceCounter _cpuCounter;
         private readonly PerformanceCounter _ramCounter;
-        private readonly PerformanceCounter _diskCounter;
+
+        // Separate Disk Counters
+        private readonly PerformanceCounter _diskReadCounter;
+        private readonly PerformanceCounter _diskWriteCounter;
         private readonly List<(string Name, PerformanceCounter Counter)> _diskDrives;
 
         // LibreHardwareMonitor
         private readonly Computer _computer;
         private readonly IHardware? _gpuHardware;
 
-        // Network State
-        private long _previousNetworkBytes = 0;
+        // Separate Network State
+        private long _previousNetworkReceived = 0;
+        private long _previousNetworkSent = 0;
         private bool _isFirstNetworkCheck = true;
 
         public PerformanceMonitor()
@@ -29,7 +33,10 @@ namespace WinHUD.Services
             // 1. Initialize Standard Counters
             _cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
             _ramCounter = new PerformanceCounter("Memory", "Available MBytes");
-            _diskCounter = new PerformanceCounter("PhysicalDisk", "Disk Bytes/sec", "_Total");
+
+            // Split Disk Counters into Read and Write
+            _diskReadCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
+            _diskWriteCounter = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
 
             // Initialize individual disk counters for load summary
             _diskDrives = [];
@@ -73,7 +80,10 @@ namespace WinHUD.Services
                 Debug.WriteLine("[Monitor] Failed to open GPU hardware. Admin rights might be needed.");
             }
 
-            _previousNetworkBytes = GetTotalNetworkBytes();
+            // Initialize network baseline
+            var (initialRx, initialTx) = GetNetworkStats();
+            _previousNetworkReceived = initialRx;
+            _previousNetworkSent = initialTx;
         }
 
         // --- GETTERS ---
@@ -98,22 +108,34 @@ namespace WinHUD.Services
             return $"GPU: {value:F0}%";
         }
 
-        public string GetTotalDiskSpeed() => FormatSpeed(_diskCounter.NextValue());
+        // Formatted Disk Read/Write
+        public string GetTotalDiskSpeed()
+        {
+            float readSpeed = _diskReadCounter.NextValue();
+            float writeSpeed = _diskWriteCounter.NextValue();
+            return $"↓ {FormatSpeed(readSpeed)} - ↑ {FormatSpeed(writeSpeed)}";
+        }
 
+        // Formatted Network Download/Upload
         public string GetNetworkSpeed()
         {
-            long currentBytes = GetTotalNetworkBytes();
-            long diff = currentBytes - _previousNetworkBytes;
+            var (currentRx, currentTx) = GetNetworkStats();
+
+            long diffRx = currentRx - _previousNetworkReceived;
+            long diffTx = currentTx - _previousNetworkSent;
 
             // Handle first tick strike
             if (_isFirstNetworkCheck)
             {
-                diff = 0;
+                diffRx = 0;
+                diffTx = 0;
                 _isFirstNetworkCheck = false;
             }
 
-            _previousNetworkBytes = currentBytes;
-            return FormatSpeed(diff);
+            _previousNetworkReceived = currentRx;
+            _previousNetworkSent = currentTx;
+
+            return $"↓ {FormatSpeed(diffRx)} - ↑ {FormatSpeed(diffTx)}";
         }
 
         public string GetDiskLoadSummary()
@@ -130,18 +152,23 @@ namespace WinHUD.Services
 
         // --- HELPERS ---
 
-        private static long GetTotalNetworkBytes()
+        // Returns a tuple separating Received (Rx) and Sent (Tx) bytes
+        private static (long Received, long Sent) GetNetworkStats()
         {
-            long total = 0;
+            long rx = 0;
+            long tx = 0;
+
             var interfaces = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(ni => ni.OperationalStatus == OperationalStatus.Up && ni.NetworkInterfaceType != NetworkInterfaceType.Loopback);
 
             foreach (var ni in interfaces)
             {
                 var stats = ni.GetIPStatistics();
-                total += (stats.BytesReceived + stats.BytesSent);
+                rx += stats.BytesReceived;
+                tx += stats.BytesSent;
             }
-            return total;
+
+            return (rx, tx);
         }
 
         private static string FormatSpeed(float bytes)
@@ -156,6 +183,14 @@ namespace WinHUD.Services
             try
             {
                 _computer.Close();
+                _cpuCounter?.Dispose();
+                _ramCounter?.Dispose();
+                _diskReadCounter?.Dispose();
+                _diskWriteCounter?.Dispose();
+                foreach (var drive in _diskDrives)
+                {
+                    drive.Counter?.Dispose();
+                }
             }
             catch { }
         }
