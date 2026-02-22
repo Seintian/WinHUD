@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using WinHUD.Models.Nodes;
+
 namespace WinHUD.Models
 {
     public enum OverlayMode
@@ -10,10 +13,9 @@ namespace WinHUD.Models
     public class AppConfig
     {
         public string TargetMonitorDeviceName { get; set; } = string.Empty;
-
         public OverlayMode Mode { get; set; } = OverlayMode.Auto;
 
-        // FUTURE (Checkpoint 2): 
-        // public List<OverlayNode> Layout { get; set; } = new();
+        // The user's custom layout tree
+        public List<OverlayNode> Layout { get; set; } = new();
     }
 }
