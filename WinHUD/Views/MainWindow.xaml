@@ -26,14 +26,10 @@
 		<converters:DiskListConverter x:Key="DiskListConverter" />
 
 		<DataTemplate DataType="{x:Type nodes:WidgetNode}">
-			<TextBlock FontSize="{Binding FontSize}"
-                       FontWeight="Bold"
-                       Foreground="#00FF00"
-                       Margin="{Binding MarginThickness}">
+			<TextBlock FontSize="{Binding FontSize}" FontWeight="Bold" Margin="{Binding MarginThickness}">
 				<Run Text="{Binding PrefixText}" />
 				<Run x:Name="ValueRun" Text="--" />
 			</TextBlock>
-
 			<DataTemplate.Triggers>
 				<DataTrigger Binding="{Binding Type}" Value="Cpu">
 					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData.CpuUsagePercent, RelativeSource={RelativeSource AncestorType=Window}, StringFormat={}{0:F1}%}" />
@@ -44,7 +40,6 @@
 				<DataTrigger Binding="{Binding Type}" Value="Gpu">
 					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData.GpuUsagePercent, RelativeSource={RelativeSource AncestorType=Window}, StringFormat={}{0:F0}%}" />
 				</DataTrigger>
-
 				<DataTrigger Binding="{Binding Type}" Value="Disk">
 					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource DiskConverter}}" />
 				</DataTrigger>
@@ -61,14 +56,25 @@
 			<ItemsControl ItemsSource="{Binding Children}" Margin="{Binding MarginThickness}">
 				<ItemsControl.ItemsPanel>
 					<ItemsPanelTemplate>
-						<StackPanel Orientation="Vertical" />
+						<StackPanel>
+							<StackPanel.Style>
+								<Style TargetType="StackPanel">
+									<Setter Property="Orientation" Value="Vertical"/>
+									<Style.Triggers>
+										<DataTrigger Binding="{Binding Direction}" Value="Horizontal">
+											<Setter Property="Orientation" Value="Horizontal"/>
+										</DataTrigger>
+									</Style.Triggers>
+								</Style>
+							</StackPanel.Style>
+						</StackPanel>
 					</ItemsPanelTemplate>
 				</ItemsControl.ItemsPanel>
 			</ItemsControl>
 		</DataTemplate>
 	</Window.Resources>
 
-	<Border Background="#20000000" CornerRadius="5" Padding="10">
+	<Border Background="Transparent" Padding="10">
 		<ItemsControl ItemsSource="{Binding Config.Layout}" />
 	</Border>
 </Window>

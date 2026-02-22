@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using WinHUD.Models;
 using WinHUD.Models.Nodes;
 using WinHUD.Services;
@@ -7,32 +10,46 @@ namespace WinHUD.ViewModels
     public class EditorViewModel : ObservableObject
     {
         public AppConfig Config { get; private set; }
+        public IEnumerable<WidgetType> AvailableWidgets => Enum.GetValues<WidgetType>();
+        public LayoutNode MainLayout => Config.Layout.OfType<LayoutNode>().FirstOrDefault() ?? CreateDefaultLayout();
 
         public EditorViewModel()
         {
             Config = ConfigPersistence.Load();
-
-            // Bootstrapping: If the user has a blank config, give them a default setup
-            if (Config.Layout.Count == 0)
-            {
-                CreateDefaultLayout();
-                Save(); // Save it immediately so MainViewModel sees it
-            }
+            if (Config.Layout.Count == 0) CreateDefaultLayout();
         }
 
-        private void CreateDefaultLayout()
+        public void ToggleOrientation()
         {
-            var stack = new LayoutNode { Direction = LayoutDirection.Vertical, Spacing = 2 };
+            MainLayout.Direction = MainLayout.Direction == LayoutDirection.Vertical
+                                 ? LayoutDirection.Horizontal
+                                 : LayoutDirection.Vertical;
+        }
 
-            stack.Children.Add(new WidgetNode { Type = WidgetType.Cpu, PrefixText = "CPU: " });
-            stack.Children.Add(new WidgetNode { Type = WidgetType.Ram, PrefixText = "RAM: " });
-
+        private LayoutNode CreateDefaultLayout()
+        {
+            var stack = new LayoutNode();
             Config.Layout.Add(stack);
+            return stack;
         }
 
-        public void Save()
+        // Insert at a specific index to allow squeezing between blocks
+        public void AddWidget(WidgetType type, int insertIndex = -1)
         {
-            ConfigPersistence.Save(Config);
+            var widget = new WidgetNode
+            {
+                Type = type,
+                // DiskList gets no prefix by default!
+                PrefixText = type == WidgetType.DiskList ? "" : $"{type}: "
+            };
+
+            if (insertIndex >= 0 && insertIndex <= MainLayout.Children.Count)
+                MainLayout.Children.Insert(insertIndex, widget);
+            else
+                MainLayout.Children.Add(widget); // Fallback: append to end
         }
+
+        public void RemoveWidget(OverlayNode node) => MainLayout.Children.Remove(node);
+        public void Save() => ConfigPersistence.Save(Config);
     }
 }

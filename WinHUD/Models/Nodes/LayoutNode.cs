@@ -1,21 +1,20 @@
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace WinHUD.Models.Nodes
 {
-    public enum LayoutDirection
-    {
-        Vertical,
-        Horizontal
-    }
+    public enum LayoutDirection { Vertical, Horizontal }
 
     public class LayoutNode : OverlayNode
     {
-        public LayoutDirection Direction { get; set; } = LayoutDirection.Vertical;
+        private LayoutDirection _direction = LayoutDirection.Vertical;
 
-        // Space between items in this container
+        public LayoutDirection Direction
+        {
+            get => _direction;
+            set { _direction = value; OnPropertyChanged(); }
+        }
+
         public double Spacing { get; set; } = 5;
-
-        // The blocks contained inside this layout
-        public List<OverlayNode> Children { get; set; } = new();
+        public ObservableCollection<OverlayNode> Children { get; set; } = new();
     }
 }

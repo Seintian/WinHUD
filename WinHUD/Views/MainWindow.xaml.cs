@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using WinHUD.Core;
 using WinHUD.Services;
 using WinHUD.ViewModels;
@@ -15,10 +16,12 @@ namespace WinHUD.Views
     {
         private IntPtr _windowHandle;
         private readonly MainViewModel _viewModel;
-
-        // Keep track of our Tray and Editor instances
         private TrayService? _trayService;
         private EditorWindow? _editorWindow;
+
+        // Contrast Services
+        private readonly BackgroundAnalyzer _contrastService;
+        private readonly DispatcherTimer _contrastTimer;
 
         public MainWindow()
         {
@@ -27,7 +30,12 @@ namespace WinHUD.Views
             _viewModel = new MainViewModel();
             this.DataContext = _viewModel;
 
-            // Initialize the Tray Service and hook up the callbacks
+            // Initialize Dynamic Contrast
+            _contrastService = new BackgroundAnalyzer();
+            _contrastTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _contrastTimer.Tick += UpdateContrast;
+            _contrastTimer.Start();
+
             _trayService = new TrayService(
                 onMonitorSelected: HandleMonitorSelection,
                 onExit: () => Application.Current.Shutdown(),
@@ -45,6 +53,37 @@ namespace WinHUD.Views
             };
         }
 
+        private void UpdateContrast(object? sender, EventArgs e)
+        {
+            if (this.Opacity < 1 || !_viewModel.IsOverlayVisible) return;
+            try
+            {
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget == null) return;
+
+                double dpiX = source.CompositionTarget.TransformToDevice.M11;
+                double dpiY = source.CompositionTarget.TransformToDevice.M22;
+
+                int pixelLeft = (int)(this.Left * dpiX);
+                int pixelTop = (int)(this.Top * dpiY);
+                int pixelWidth = (int)(this.ActualWidth * dpiX);
+                int pixelHeight = (int)(this.ActualHeight * dpiY);
+
+                // Sample dead center of the overlay
+                int sampleX = pixelLeft + (pixelWidth / 2);
+                int sampleY = pixelTop + (pixelHeight / 2);
+
+                var optimalBrush = _contrastService.GetOptimalTextColor(sampleX, sampleY);
+
+                // Apply this color to EVERY text block in the window simultaneously
+                System.Windows.Documents.TextElement.SetForeground(this, optimalBrush);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Main] Error updating contrast: {ex.Message}");
+            }
+        }
+
         private void HandleMonitorSelection(WinFormsScreen screen)
         {
             _viewModel.Config.TargetMonitorDeviceName = screen.DeviceName;
@@ -53,10 +92,8 @@ namespace WinHUD.Views
             SnapToTargetScreen();
         }
 
-        // Open the Editor and reload layout when it closes
         private void OpenEditorWindow()
         {
-            // Don't open a second editor if one is already open
             if (_editorWindow != null && _editorWindow.IsLoaded)
             {
                 _editorWindow.Activate();
@@ -66,12 +103,9 @@ namespace WinHUD.Views
             _editorWindow = new EditorWindow();
             _editorWindow.Closed += (s, e) =>
             {
-                // When you close the editor, 
-                // the overlay immediately updates its UI blocks!
                 _viewModel.ReloadConfig();
                 _editorWindow = null;
             };
-
             _editorWindow.Show();
         }
 
@@ -80,9 +114,7 @@ namespace WinHUD.Views
             if (!_viewModel.IsOverlayVisible) return;
             try
             {
-                var screen = WinFormsScreen.AllScreens.FirstOrDefault(s => s.DeviceName == _viewModel.Config.TargetMonitorDeviceName)
-                             ?? WinFormsScreen.PrimaryScreen;
-
+                var screen = WinFormsScreen.AllScreens.FirstOrDefault(s => s.DeviceName == _viewModel.Config.TargetMonitorDeviceName) ?? WinFormsScreen.PrimaryScreen;
                 if (screen == null) return;
 
                 double dpiX = 1.0, dpiY = 1.0;
@@ -124,6 +156,7 @@ namespace WinHUD.Views
 
         protected override void OnClosed(EventArgs e)
         {
+            _contrastTimer.Stop();
             _trayService?.Dispose();
             _viewModel.Dispose();
             NativeMethods.UnregisterHotKey(_windowHandle, 9000);
