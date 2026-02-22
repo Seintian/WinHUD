@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Threading;
 using WinHUD.Models;
+using WinHUD.Models.Nodes;
 using WinHUD.Services;
 
 namespace WinHUD.ViewModels
@@ -15,14 +17,13 @@ namespace WinHUD.ViewModels
 
         public AppConfig Config { get; private set; }
 
-        // The UI will bind directly to this property to get its numbers!
         public HardwareData CurrentData
         {
             get => _currentData;
             set
             {
                 _currentData = value;
-                OnPropertyChanged(); // Tells the UI to update
+                OnPropertyChanged();
             }
         }
 
@@ -41,6 +42,19 @@ namespace WinHUD.ViewModels
             _monitor = new PerformanceMonitor();
             Config = ConfigPersistence.Load();
 
+            // If the layout is empty (e.g., first run or old config.json), 
+            // build the default layout right here in the overlay engine!
+            if (Config.Layout == null || Config.Layout.Count == 0)
+            {
+                Config.Layout = new List<OverlayNode>();
+                var stack = new LayoutNode { Direction = LayoutDirection.Vertical, Spacing = 2 };
+                stack.Children.Add(new WidgetNode { Type = WidgetType.Cpu, PrefixText = "CPU: " });
+                stack.Children.Add(new WidgetNode { Type = WidgetType.Ram, PrefixText = "RAM: " });
+
+                Config.Layout.Add(stack);
+                ConfigPersistence.Save(Config); // Save it so it's persistent
+            }
+
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _timer.Tick += OnTick;
             _timer.Start();
@@ -48,10 +62,8 @@ namespace WinHUD.ViewModels
 
         private void OnTick(object? sender, EventArgs e)
         {
-            // 1. Fetch raw math
             CurrentData = _monitor.GetLatestData();
 
-            // 2. Handle Tri-State Visibility Logic
             bool isGameActive = GameDetector.IsProcessRunning("gameoverlayui64");
             IsOverlayVisible = Config.Mode switch
             {
@@ -61,7 +73,6 @@ namespace WinHUD.ViewModels
             };
         }
 
-        // Called by MainWindow when Alt+Shift+H is pressed
         public void ToggleOverlayMode()
         {
             bool isGameActive = GameDetector.IsProcessRunning("gameoverlayui64");
@@ -73,14 +84,13 @@ namespace WinHUD.ViewModels
                 : (isGameActive ? OverlayMode.Auto : OverlayMode.ForceShow);
 
             ConfigPersistence.Save(Config);
-            OnTick(null, EventArgs.Empty); // Force instant visual update
+            OnTick(null, EventArgs.Empty);
         }
 
-        // Called after the user saves changes in the Editor
         public void ReloadConfig()
         {
             Config = ConfigPersistence.Load();
-            OnPropertyChanged(nameof(Config)); // Forces the Layout to redraw
+            OnPropertyChanged(nameof(Config));
         }
 
         public void Dispose()
