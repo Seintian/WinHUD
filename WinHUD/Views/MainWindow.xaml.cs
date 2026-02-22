@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Interop;
 using WinHUD.Core;
+using WinHUD.Services;
 using WinHUD.ViewModels;
 using WinFormsScreen = System.Windows.Forms.Screen;
+using Application = System.Windows.Application;
 
 namespace WinHUD.Views
 {
@@ -13,15 +16,25 @@ namespace WinHUD.Views
         private IntPtr _windowHandle;
         private readonly MainViewModel _viewModel;
 
+        // Keep track of our Tray and Editor instances
+        private TrayService? _trayService;
+        private EditorWindow? _editorWindow;
+
         public MainWindow()
         {
             InitializeComponent();
 
-            // 1. Assign the Engine (ViewModel)
             _viewModel = new MainViewModel();
             this.DataContext = _viewModel;
 
-            // 2. Snap to screen when sizes change
+            // Initialize the Tray Service and hook up the callbacks
+            _trayService = new TrayService(
+                onMonitorSelected: HandleMonitorSelection,
+                onExit: () => Application.Current.Shutdown(),
+                onOpenEditor: OpenEditorWindow,
+                initialDeviceName: _viewModel.Config.TargetMonitorDeviceName
+            );
+
             this.SizeChanged += (s, e) => SnapToTargetScreen();
             _viewModel.PropertyChanged += (s, e) =>
             {
@@ -30,6 +43,36 @@ namespace WinHUD.Views
                     SnapToTargetScreen();
                 }
             };
+        }
+
+        private void HandleMonitorSelection(WinFormsScreen screen)
+        {
+            _viewModel.Config.TargetMonitorDeviceName = screen.DeviceName;
+            ConfigPersistence.Save(_viewModel.Config);
+            _trayService?.UpdateSelectedMonitor(screen.DeviceName);
+            SnapToTargetScreen();
+        }
+
+        // Open the Editor and reload layout when it closes
+        private void OpenEditorWindow()
+        {
+            // Don't open a second editor if one is already open
+            if (_editorWindow != null && _editorWindow.IsLoaded)
+            {
+                _editorWindow.Activate();
+                return;
+            }
+
+            _editorWindow = new EditorWindow();
+            _editorWindow.Closed += (s, e) =>
+            {
+                // When you close the editor, 
+                // the overlay immediately updates its UI blocks!
+                _viewModel.ReloadConfig();
+                _editorWindow = null;
+            };
+
+            _editorWindow.Show();
         }
 
         private void SnapToTargetScreen()
@@ -65,7 +108,7 @@ namespace WinHUD.Views
             base.OnSourceInitialized(e);
             _windowHandle = new WindowInteropHelper(this).Handle;
             NativeMethods.SetWindowGhostMode(_windowHandle);
-            NativeMethods.RegisterHotKey(_windowHandle, 9000, 5, 0x48); // Alt+Shift+H
+            NativeMethods.RegisterHotKey(_windowHandle, 9000, 5, 0x48);
             HwndSource.FromHwnd(_windowHandle).AddHook(HwndHook);
         }
 
@@ -81,6 +124,7 @@ namespace WinHUD.Views
 
         protected override void OnClosed(EventArgs e)
         {
+            _trayService?.Dispose();
             _viewModel.Dispose();
             NativeMethods.UnregisterHotKey(_windowHandle, 9000);
             base.OnClosed(e);
