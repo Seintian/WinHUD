@@ -6,11 +6,12 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using WinHUD.Core;
 using WinHUD.Services;
+using WinHUD.Models;
 
 // ALIAS: Distinct between WPF and WinForms Screen classes
 using WinFormsScreen = System.Windows.Forms.Screen;
 
-namespace WinHUD
+namespace WinHUD.Views
 {
     public partial class MainWindow : Window
     {

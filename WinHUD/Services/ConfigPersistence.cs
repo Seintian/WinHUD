@@ -2,24 +2,10 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
+using WinHUD.Models;
 
 namespace WinHUD.Services
 {
-    // Overlay Toggling UX, respecting the game state and user preferences
-    public enum OverlayMode
-    {
-        Auto = 0,       // Follows Game State (Default)
-        ForceShow = 1,  // Always Visible
-        ForceHide = 2   // Always Hidden
-    }
-
-    // The data model for our settings
-    public class AppConfig
-    {
-        public string TargetMonitorDeviceName { get; set; } = string.Empty;
-        public OverlayMode Mode { get; set; } = OverlayMode.Auto;
-    }
-
     public static class ConfigPersistence
     {
         private static readonly string ConfigFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WinHUD");
