@@ -26,12 +26,13 @@
 		<converters:DiskListConverter x:Key="DiskListConverter" />
 
 		<DataTemplate DataType="{x:Type nodes:WidgetNode}">
-			<TextBlock FontSize="{Binding FontSize}" FontWeight="Bold" Margin="{Binding MarginThickness}">
+			<TextBlock FontSize="{Binding FontSize}"
+                       FontWeight="Bold"
+                       Margin="{Binding MarginThickness}"
+                       MinWidth="{Binding MinWidth}"
+                       Typography.NumeralAlignment="Tabular"
+                       xml:space="preserve"><Run Text="{Binding PrefixText}" /><Run x:Name="ValueRun" Text="--" /></TextBlock>
 
-				<Run Text="{Binding PrefixText}" />
-				<Run x:Name="ValueRun" Text="--" />
-
-			</TextBlock>
 			<DataTemplate.Triggers>
 				<DataTrigger Binding="{Binding Type}" Value="Cpu">
 					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData.CpuUsagePercent, RelativeSource={RelativeSource AncestorType=Window}, StringFormat={}{0:F1}%}" />
@@ -48,7 +49,6 @@
 				<DataTrigger Binding="{Binding Type}" Value="Network">
 					<Setter TargetName="ValueRun" Property="Text" Value="{Binding DataContext.CurrentData, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource NetConverter}}" />
 				</DataTrigger>
-
 				<DataTrigger Binding="{Binding Type}" Value="DiskList">
 					<Setter TargetName="ValueRun" Property="Text">
 						<Setter.Value>

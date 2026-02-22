@@ -74,8 +74,10 @@
 							<ItemsControl.ItemTemplate>
 								<DataTemplate DataType="{x:Type nodes:WidgetNode}">
 									<Border Background="#1E1E1E" BorderBrush="#3F3F46" BorderThickness="1"
-                                            CornerRadius="4" Padding="5" Margin="5" MinWidth="130" Height="35"
+                                            CornerRadius="4" Padding="5" Margin="5"
+                                            MinWidth="{Binding MinWidth}" Height="35"
                                             AllowDrop="True" Drop="ActiveBlock_Drop" MouseMove="ActiveBlock_MouseMove">
+
 										<Grid>
 											<Grid.ColumnDefinitions>
 												<ColumnDefinition Width="Auto"/>

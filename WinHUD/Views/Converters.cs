@@ -12,9 +12,10 @@ namespace WinHUD.Views.Converters
     {
         public static string FormatSpeed(float bytes)
         {
-            if (bytes < 1024) return $"{bytes:F0} B/s";
-            if (bytes < 1024 * 1024) return $"{bytes / 1024:F1} KB/s";
-            return $"{bytes / 1024 / 1024:F1} MB/s";
+            // PadLeft forces the string to always take up 10 character slots!
+            if (bytes < 1024) return $"{bytes:F0} B/s".PadLeft(10);
+            if (bytes < 1024 * 1024) return $"{bytes / 1024:F1} KB/s".PadLeft(10);
+            return $"{bytes / 1024 / 1024:F1} MB/s".PadLeft(10);
         }
     }
 
@@ -34,14 +35,12 @@ namespace WinHUD.Views.Converters
         public object ConvertBack(object v, Type t, object p, CultureInfo c) => throw new NotImplementedException();
     }
 
-    // FIX: Upgraded to MultiValueConverter to read Layout Orientation!
     public class DiskListConverter : IMultiValueConverter
     {
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
         {
             if (values.Length >= 2 && values[0] is Dictionary<string, float> dict && values[1] is LayoutDirection dir)
             {
-                // If horizontal, separate disks with a pipe. If vertical, stack them with a newline.
                 string separator = dir == LayoutDirection.Horizontal ? "   |   " : "\n";
                 return string.Join(separator, dict.Select(kv => $"Disk {kv.Key} - {kv.Value:F0}%"));
             }
