@@ -17,6 +17,9 @@ namespace WinHUD.Views
     {
         private readonly EditorViewModel _viewModel;
 
+        // Track exactly where the mouse first clicked down
+        private Point? _dragStartPoint;
+
         public EditorWindow()
         {
             InitializeComponent();
@@ -24,34 +27,60 @@ namespace WinHUD.Views
             this.DataContext = _viewModel;
         }
 
-        private void ToggleOrientation_Click(object sender, RoutedEventArgs e)
+        // Record the starting coordinates
+        private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            _viewModel.ToggleOrientation();
+            _dragStartPoint = e.GetPosition(null);
         }
 
+        // Enforce minimum drag distance for the Palette buttons
         private void PaletteButton_MouseMove(object sender, MouseEventArgs e)
         {
-            if (e.LeftButton == MouseButtonState.Pressed && sender is Button btn && btn.Tag is WidgetType type)
-                DragDrop.DoDragDrop(btn, type.ToString(), DragDropEffects.Copy);
+            // Using "is Point startPoint" securely unwraps the nullable without warnings!
+            if (e.LeftButton == MouseButtonState.Pressed && sender is Button btn && btn.Tag is WidgetType type && _dragStartPoint is Point startPoint)
+            {
+                Point mousePos = e.GetPosition(null);
+
+                // Use the unwrapped startPoint directly
+                Vector diff = startPoint - mousePos;
+
+                if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+                {
+                    _dragStartPoint = null;
+                    DragDrop.DoDragDrop(btn, type.ToString(), DragDropEffects.Copy);
+                }
+            }
         }
 
+        // Enforce minimum drag distance for the active blocks
         private void ActiveBlock_MouseMove(object sender, MouseEventArgs e)
         {
-            if (e.LeftButton == MouseButtonState.Pressed && sender is FrameworkElement element && element.DataContext is WidgetNode node)
-                DragDrop.DoDragDrop(element, node, DragDropEffects.Move);
+            // Using "is Point startPoint" securely unwraps the nullable without warnings!
+            if (e.LeftButton == MouseButtonState.Pressed && sender is FrameworkElement element && element.DataContext is WidgetNode node && _dragStartPoint is Point startPoint)
+            {
+                Point mousePos = e.GetPosition(null);
+
+                // Use the unwrapped startPoint directly
+                Vector diff = startPoint - mousePos;
+
+                if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+                {
+                    _dragStartPoint = null;
+                    DragDrop.DoDragDrop(element, node, DragDropEffects.Move);
+                }
+            }
         }
 
-        // 1. Dropping ON an existing block (Squeezing it in between)
         private void ActiveBlock_Drop(object sender, DragEventArgs e)
         {
             if (sender is FrameworkElement targetElement && targetElement.DataContext is WidgetNode targetNode)
             {
                 int targetIndex = _viewModel.MainLayout.Children.IndexOf(targetNode);
-
-                // Smart insertion: Did they drop on the left half or right half of the block?
                 Point dropPos = e.GetPosition(targetElement);
                 if (dropPos.X > targetElement.ActualWidth / 2)
-                    targetIndex++; // Insert AFTER the block
+                    targetIndex++;
 
                 if (e.Data.GetDataPresent(DataFormats.StringFormat))
                 {
@@ -66,40 +95,25 @@ namespace WinHUD.Views
                     {
                         var children = _viewModel.MainLayout.Children;
                         int sourceIndex = children.IndexOf(sourceNode);
-
-                        // Prevent index shifting when moving left-to-right
                         if (sourceIndex < targetIndex) targetIndex--;
-
                         children.Move(sourceIndex, targetIndex);
                     }
                 }
-                e.Handled = true; // Tell WPF we handled it so the canvas drop event doesn't fire too!
+                e.Handled = true;
             }
         }
 
-        // 2. Dropping into the empty space on the Canvas
         private void ActiveLayout_Drop(object sender, DragEventArgs e)
         {
-            if (e.Handled) return; // Prevent double-drops
+            if (e.Handled) return;
 
             if (e.Data.GetDataPresent(DataFormats.StringFormat))
             {
-                // Spawning a new block from the Palette
                 string typeStr = (string)e.Data.GetData(DataFormats.StringFormat);
                 if (Enum.TryParse(typeStr, out WidgetType type))
-                    _viewModel.AddWidget(type); // Appends to the end
-            }
-            else if (e.Data.GetDataPresent(typeof(WidgetNode)))
-            {
-                // Moving an existing block to the end of the list
-                var sourceNode = (WidgetNode)e.Data.GetData(typeof(WidgetNode));
-                var children = _viewModel.MainLayout.Children;
+                    _viewModel.AddWidget(type);
 
-                int sourceIndex = children.IndexOf(sourceNode);
-                if (sourceIndex >= 0 && sourceIndex != children.Count - 1)
-                {
-                    children.Move(sourceIndex, children.Count - 1);
-                }
+                e.Handled = true;
             }
         }
 
@@ -112,6 +126,11 @@ namespace WinHUD.Views
         {
             _viewModel.Save();
             this.Close();
+        }
+
+        private void ToggleOrientation_Click(object sender, RoutedEventArgs e)
+        {
+            _viewModel.ToggleOrientation();
         }
     }
 }
