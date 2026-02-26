@@ -15,7 +15,7 @@ namespace WinHUD.Models.Nodes
 
         // Add default spacing so items aren't glued together
         private double _marginRight = 15;
-        private double _marginBottom = 5;
+        private double _marginBottom = 0;
 
         public double MarginLeft { get => _marginLeft; set { _marginLeft = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }
         public double MarginTop { get => _marginTop; set { _marginTop = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }

@@ -34,6 +34,7 @@ namespace WinHUD.Views
             _contrastService = new BackgroundAnalyzer();
             _contrastTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _contrastTimer.Tick += UpdateContrast;
+            _contrastTimer.Tick += KeepTopMost;
             _contrastTimer.Start();
 
             _trayService = new TrayService(
@@ -51,6 +52,23 @@ namespace WinHUD.Views
                     SnapToTargetScreen();
                 }
             };
+        }
+
+        private void KeepTopMost(object? sender, EventArgs e)
+        {
+            // Don't waste CPU cycles if the overlay is currently hidden
+            if (this.Opacity < 1 || !_viewModel.IsOverlayVisible) return;
+            
+            // Aggressively re-assert Z-Order every 500ms!
+            // SWP_NOACTIVATE ensures it never steals focus from the user's game.
+            if (_windowHandle != IntPtr.Zero)
+            {
+                NativeMethods.SetWindowPos(
+                    _windowHandle, 
+                    NativeMethods.HWND_TOPMOST, 
+                    0, 0, 0, 0, 
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+            }
         }
 
         private void UpdateContrast(object? sender, EventArgs e)

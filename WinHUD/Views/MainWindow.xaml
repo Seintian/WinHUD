@@ -28,6 +28,7 @@
 		<DataTemplate DataType="{x:Type nodes:WidgetNode}">
 			<TextBlock FontSize="{Binding FontSize}"
                        FontWeight="Bold"
+                       VerticalAlignment="Center"
                        Margin="{Binding MarginThickness}"
                        MinWidth="{Binding MinWidth}"
                        Typography.NumeralAlignment="Tabular"
