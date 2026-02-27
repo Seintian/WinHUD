@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace WinHUD.Models
 {
     public class HardwareData
@@ -15,6 +13,6 @@ namespace WinHUD.Models
         public long NetUploadBytesPerSec { get; set; }
 
         // Store individual disk loads as Key-Value pairs (e.g., "C:" -> 45.0)
-        public Dictionary<string, float> DiskLoads { get; set; } = new();
+        public Dictionary<string, float> DiskLoads { get; set; } = [];
     }
 }

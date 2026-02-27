@@ -15,6 +15,6 @@ namespace WinHUD.Models.Nodes
         }
 
         public double Spacing { get; set; } = 5;
-        public ObservableCollection<OverlayNode> Children { get; set; } = new();
+        public ObservableCollection<OverlayNode> Children { get; set; } = [];
     }
 }

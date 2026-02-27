@@ -1,9 +1,6 @@
-using System;
-using System.Drawing;
 using System.Windows.Media;
 using Color = System.Drawing.Color;
 using Brush = System.Windows.Media.Brush;
-using Brushes = System.Windows.Media.Brushes;
 
 namespace WinHUD.Services
 {

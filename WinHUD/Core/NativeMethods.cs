@@ -1,6 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using System.Windows;
+﻿using System.Runtime.InteropServices;
 
 namespace WinHUD.Core
 {
@@ -25,10 +23,10 @@ namespace WinHUD.Core
         public const int GWL_EXSTYLE        = -20;
         public const int WM_HOTKEY          = 0x0312;
         public const uint MONITOR_DEFAULTTONEAREST = 0x00000002; // To anchor when Window changes
-        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-        public const uint SWP_NOSIZE = 0x0001;
-        public const uint SWP_NOMOVE = 0x0002;
-        public const uint SWP_NOACTIVATE = 0x0010;
+        public static readonly IntPtr HWND_TOPMOST = new(-1);
+        public const uint SWP_NOSIZE      = 0x0001;
+        public const uint SWP_NOMOVE      = 0x0002;
+        public const uint SWP_NOACTIVATE  = 0x0010;
 
         // --- WINDOW STYLES ---
         [DllImport("user32.dll")]

@@ -1,7 +1,4 @@
-using System;
-using System.Drawing;
 using System.Reflection;
-using System.Windows.Forms;
 using WinFormsScreen = System.Windows.Forms.Screen;
 
 namespace WinHUD.Services

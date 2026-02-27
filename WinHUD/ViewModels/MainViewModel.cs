@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Windows.Threading;
 using WinHUD.Models;
 using WinHUD.Models.Nodes;

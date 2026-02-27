@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using WinHUD.Models.Nodes;
 
 namespace WinHUD.Models
@@ -16,6 +15,6 @@ namespace WinHUD.Models
         public OverlayMode Mode { get; set; } = OverlayMode.Auto;
 
         // The user's custom layout tree
-        public List<OverlayNode> Layout { get; set; } = new();
+        public List<OverlayNode> Layout { get; set; } = [];
     }
 }

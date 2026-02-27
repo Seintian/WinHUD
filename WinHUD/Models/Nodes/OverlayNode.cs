@@ -23,7 +23,7 @@ namespace WinHUD.Models.Nodes
         public double MarginBottom { get => _marginBottom; set { _marginBottom = value; OnPropertyChanged(); OnPropertyChanged(nameof(MarginThickness)); } }
 
         [JsonIgnore]
-        public Thickness MarginThickness => new Thickness(MarginLeft, MarginTop, MarginRight, MarginBottom);
+        public Thickness MarginThickness => new(MarginLeft, MarginTop, MarginRight, MarginBottom);
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

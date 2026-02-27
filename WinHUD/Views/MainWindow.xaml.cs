@@ -1,7 +1,4 @@
-﻿using System;
-using System.Diagnostics;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using WinHUD.Core;
@@ -17,7 +14,7 @@ namespace WinHUD.Views
     {
         private IntPtr _windowHandle;
         private readonly MainViewModel _viewModel;
-        private TrayService? _trayService;
+        private readonly TrayService? _trayService;
         private EditorWindow? _editorWindow;
 
         // Contrast Services

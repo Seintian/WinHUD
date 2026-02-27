@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
+﻿using System.Diagnostics;
 using System.Net.NetworkInformation;
 using LibreHardwareMonitor.Hardware;
 using Serilog;
@@ -88,11 +85,12 @@ namespace WinHUD.Services
 
         public HardwareData GetLatestData()
         {
-            var data = new HardwareData();
-
-            // 1. CPU & RAM
-            data.CpuUsagePercent = _cpuCounter.NextValue();
-            data.RamAvailableMb = _ramCounter.NextValue();
+            var data = new HardwareData
+            {
+                // 1. CPU & RAM
+                CpuUsagePercent = _cpuCounter.NextValue(),
+                RamAvailableMb = _ramCounter.NextValue()
+            };
 
             // 2. GPU
             if (_gpuHardware != null)
@@ -166,9 +164,9 @@ namespace WinHUD.Services
                 _ramCounter?.Dispose();
                 _diskReadCounter?.Dispose();
                 _diskWriteCounter?.Dispose();
-                foreach (var drive in _diskDrives)
+                foreach (var (_, counter) in _diskDrives)
                 {
-                    drive.Counter?.Dispose();
+                    counter?.Dispose();
                 }
             }
             catch { }
