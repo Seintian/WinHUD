@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using LibreHardwareMonitor.Hardware;
+using Serilog;
 using WinHUD.Models;
 
 namespace WinHUD.Services
@@ -48,9 +49,9 @@ namespace WinHUD.Services
                     _diskDrives.Add((instance, new PerformanceCounter("PhysicalDisk", "% Disk Time", instance)));
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                Debug.WriteLine("[Monitor] Failed to initialize disk counters. Admin rights might be needed.");
+                Log.Warning(ex, "[Monitor] Failed to initialize disk counters. Admin rights might be needed.");
             }
 
             // 2. Initialize GPU Monitor
@@ -73,9 +74,9 @@ namespace WinHUD.Services
                                       || h.HardwareType == HardwareType.GpuAmd
                                       || h.HardwareType == HardwareType.GpuIntel);
             }
-            catch
+            catch (Exception ex)
             {
-                Debug.WriteLine("[Monitor] Failed to open GPU hardware. Admin rights might be needed.");
+                Log.Warning(ex, "[Monitor] Failed to open GPU hardware. Admin rights might be needed.");
             }
 
             var (initialRx, initialTx) = GetNetworkStats();

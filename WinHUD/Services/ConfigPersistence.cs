@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Diagnostics;
+using Serilog;
 using WinHUD.Models;
 
 namespace WinHUD.Services
@@ -22,17 +22,17 @@ namespace WinHUD.Services
 
                     if (config != null)
                     {
-                        Debug.WriteLine($"[Config] Loaded successfully from {ConfigPath}");
+                        Log.Information($"[Config] Loaded successfully from {ConfigPath}");
                         return config;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Config] Error loading configuration: {ex.Message}");
+                Log.Error(ex, $"[Config] Error loading configuration: {ex.Message}");
             }
 
-            Debug.WriteLine("[Config] No valid config found, using defaults.");
+            Log.Warning("[Config] No valid config found, using defaults.");
             return new AppConfig();
         }
 
@@ -58,7 +58,7 @@ namespace WinHUD.Services
 
                 File.WriteAllText(ConfigPath, json);
 
-                Debug.WriteLine($"[Config] Saved successfully to {ConfigPath}");
+                Log.Information($"[Config] Saved successfully to {ConfigPath}");
             }
             catch (UnauthorizedAccessException)
             {
@@ -72,7 +72,7 @@ namespace WinHUD.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Config] Error saving configuration: {ex.Message}");
+                Log.Error(ex, $"[Config] Error saving configuration: {ex.Message}");
             }
         }
     }

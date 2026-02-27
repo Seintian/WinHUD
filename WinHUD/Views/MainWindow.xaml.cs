@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using WinHUD.Core;
 using WinHUD.Services;
 using WinHUD.ViewModels;
+using Serilog;
 using WinFormsScreen = System.Windows.Forms.Screen;
 using Application = System.Windows.Application;
 
@@ -98,7 +99,7 @@ namespace WinHUD.Views
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Main] Error updating contrast: {ex.Message}");
+                Log.Error(ex, $"[Main] Error updating contrast: {ex.Message}");
             }
         }
 
@@ -149,7 +150,7 @@ namespace WinHUD.Views
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Main] Error snapping: {ex.Message}");
+                Log.Error(ex, $"[Main] Error snapping: {ex.Message}");
             }
         }
 

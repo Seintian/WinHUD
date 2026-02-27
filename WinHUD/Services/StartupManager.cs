@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using Serilog;
 
 namespace WinHUD.Services
 {
@@ -26,7 +27,7 @@ namespace WinHUD.Services
                         if (existingVal != exePath)
                         {
                             key.SetValue(AppName, exePath);
-                            Debug.WriteLine("[Startup] Registry registered successfully.");
+                            Log.Information("[Startup] Registry registered successfully.");
                         }
                     }
                 }
@@ -36,7 +37,7 @@ namespace WinHUD.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Startup] Failed: {ex.Message}");
+                Log.Error(ex, $"[Startup] Failed: {ex.Message}");
             }
         }
 
@@ -75,12 +76,12 @@ namespace WinHUD.Services
                         CreateNoWindow = true
                     });
 
-                    Debug.WriteLine("[Startup] Start Menu shortcut created.");
+                    Log.Information("[Startup] Start Menu shortcut created.");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Startup] Shortcut creation failed: {ex.Message}");
+                Log.Error(ex, $"[Startup] Shortcut creation failed: {ex.Message}");
             }
         }
     }
