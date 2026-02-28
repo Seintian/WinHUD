@@ -175,6 +175,10 @@ namespace WinHUD.Services
             {
                 Log.Error(ex, "[Monitor] Error during disposal: {Message}", ex.Message);
             }
+            finally
+            {
+                GC.SuppressFinalize(this);
+            }
         }
     }
 }

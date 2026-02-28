@@ -92,6 +92,7 @@ namespace WinHUD.Services
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
             _contextMenu.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }
