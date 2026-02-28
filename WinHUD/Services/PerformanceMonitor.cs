@@ -79,6 +79,8 @@ namespace WinHUD.Services
             var (initialRx, initialTx) = GetNetworkStats();
             _previousNetworkReceived = initialRx;
             _previousNetworkSent = initialTx;
+
+            Log.Information("[Monitor] PerformanceMonitor initialized.");
         }
 
         // --- SINGLE GETTER ---
@@ -169,7 +171,10 @@ namespace WinHUD.Services
                     counter?.Dispose();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Monitor] Error during disposal: {Message}", ex.Message);
+            }
         }
     }
 }

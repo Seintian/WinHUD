@@ -1,4 +1,5 @@
 using System.Reflection;
+using Serilog;
 using WinFormsScreen = System.Windows.Forms.Screen;
 
 namespace WinHUD.Services
@@ -38,7 +39,13 @@ namespace WinHUD.Services
                 if (stream != null) _notifyIcon.Icon = new Icon(stream);
                 else _notifyIcon.Icon = SystemIcons.Application;
             }
-            catch { _notifyIcon.Icon = SystemIcons.Application; }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[TrayService] Failed to load embedded icon: {Message}", ex.Message);
+                _notifyIcon.Icon = SystemIcons.Application;
+            }
+
+            Log.Information("[TrayService] TrayService initialized.");
         }
 
         private void BuildMenu(string currentDeviceName)
@@ -76,6 +83,7 @@ namespace WinHUD.Services
 
         public void UpdateSelectedMonitor(string deviceName)
         {
+            Log.Debug("[TrayService] Updating selected monitor to {DeviceName}", deviceName);
             BuildMenu(deviceName);
         }
 

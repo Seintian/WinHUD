@@ -23,6 +23,7 @@ namespace WinHUD.Views
             InitializeComponent();
             _viewModel = new EditorViewModel();
             this.DataContext = _viewModel;
+            Serilog.Log.Information("[EditorWindow] EditorWindow initialized.");
         }
 
         // Record the starting coordinates

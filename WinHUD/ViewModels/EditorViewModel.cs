@@ -14,6 +14,7 @@ namespace WinHUD.ViewModels
         {
             Config = ConfigPersistence.Load();
             if (Config.Layout.Count == 0) CreateDefaultLayout();
+            Serilog.Log.Information("[EditorViewModel] EditorViewModel initialized.");
         }
 
         public void ToggleOrientation()
@@ -21,6 +22,7 @@ namespace WinHUD.ViewModels
             MainLayout.Direction = MainLayout.Direction == LayoutDirection.Vertical
                                  ? LayoutDirection.Horizontal
                                  : LayoutDirection.Vertical;
+            Serilog.Log.Information("[EditorViewModel] Orientation toggled to {Direction}", MainLayout.Direction);
         }
 
         private LayoutNode CreateDefaultLayout()
@@ -44,9 +46,20 @@ namespace WinHUD.ViewModels
                 MainLayout.Children.Insert(insertIndex, widget);
             else
                 MainLayout.Children.Add(widget); // Fallback: append to end
+                
+            Serilog.Log.Information("[EditorViewModel] Added Widget {Type} at index {Index}", type, insertIndex);
         }
 
-        public void RemoveWidget(OverlayNode node) => MainLayout.Children.Remove(node);
-        public void Save() => ConfigPersistence.Save(Config);
+        public void RemoveWidget(OverlayNode node)
+        {
+            MainLayout.Children.Remove(node);
+            Serilog.Log.Information("[EditorViewModel] Removed Widget from Layout.");
+        }
+        
+        public void Save()
+        {
+            ConfigPersistence.Save(Config);
+            Serilog.Log.Information("[EditorViewModel] Configuration saved.");
+        }
     }
 }

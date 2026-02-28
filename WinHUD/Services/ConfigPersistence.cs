@@ -59,8 +59,9 @@ namespace WinHUD.Services
 
                 Log.Information($"[Config] Saved successfully to {ConfigPath}");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                Log.Fatal(ex, "[Config] Critical failure saving config, permission denied: {Message}", ex.Message);
                 // This specifically catches the "Admin created it, User can't write it" error
                 System.Windows.MessageBox.Show(
                     $"WinHUD cannot save your settings.\n\nPlease go to:\n{ConfigFolder}\n\nAnd delete 'config.json' manually.",

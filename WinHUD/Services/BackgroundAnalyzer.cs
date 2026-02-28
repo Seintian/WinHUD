@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using Serilog;
 using Color = System.Drawing.Color;
 using Brush = System.Windows.Media.Brush;
 
@@ -23,6 +24,7 @@ namespace WinHUD.Services
             // But sampling a 50x50 area gives a better average of the region
             _sampleBitmap = new Bitmap(50, 50);
             _graphics = Graphics.FromImage(_sampleBitmap);
+            Log.Information("[Contrast] BackgroundAnalyzer initialized.");
         }
 
         public Brush GetOptimalTextColor(int x, int y)
@@ -57,8 +59,9 @@ namespace WinHUD.Services
                 // If background is dark (< Threshold)   -> Use Light Text
                 return (averageLum > LuminanceThreshold) ? _lightModeColor : _darkModeColor;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "[Contrast] Screen capture or analysis failed: {Message}", ex.Message);
                 // Fallback if screen capture fails (e.g., locked screen)
                 return _darkModeColor;
             }

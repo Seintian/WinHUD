@@ -13,6 +13,7 @@ namespace WinHUD.Services
         {
             try
             {
+                Log.Information("[Startup] EnsureAppRunsAtStartup called.");
                 // 1. Get current executable path
                 string exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
                 if (string.IsNullOrEmpty(exePath)) return;

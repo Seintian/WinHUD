@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using Serilog;
 using WinHUD.Models;
 using WinHUD.Models.Nodes;
 using WinHUD.Services;
@@ -39,6 +40,7 @@ namespace WinHUD.ViewModels
         {
             _monitor = new PerformanceMonitor();
             Config = ConfigPersistence.Load();
+            Log.Information("[MainViewModel] MainViewModel initialized.");
 
             // If the layout is empty (e.g., first run or old config.json), 
             // build the default layout right here in the overlay engine!
@@ -81,6 +83,8 @@ namespace WinHUD.ViewModels
                 ? (isGameActive ? OverlayMode.ForceHide : OverlayMode.Auto)
                 : (isGameActive ? OverlayMode.Auto : OverlayMode.ForceShow);
 
+            Log.Information("[MainViewModel] Toggling OverlayMode. New Mode: {Mode}", Config.Mode);
+
             ConfigPersistence.Save(Config);
             OnTick(null, EventArgs.Empty);
         }
@@ -88,6 +92,7 @@ namespace WinHUD.ViewModels
         public void ReloadConfig()
         {
             Config = ConfigPersistence.Load();
+            Log.Information("[MainViewModel] Configuration reloaded.");
             OnPropertyChanged(nameof(Config));
         }
 

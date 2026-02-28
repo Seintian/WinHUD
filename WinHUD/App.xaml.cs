@@ -15,6 +15,7 @@ namespace WinHUD
             base.OnStartup(e);
 
             LoggerService.Initialize();
+            Log.Information("Application started.");
 
             // Catch all unhandled exceptions
             this.DispatcherUnhandledException += App_DispatcherUnhandledException;

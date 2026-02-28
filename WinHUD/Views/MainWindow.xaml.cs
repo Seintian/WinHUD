@@ -26,7 +26,8 @@ namespace WinHUD.Views
             InitializeComponent();
 
             _viewModel = new MainViewModel();
-            this.DataContext = _viewModel;
+            DataContext = _viewModel;
+            Log.Information("[MainWindow] MainWindow initialized.");
 
             // Initialize Dynamic Contrast
             _contrastService = new BackgroundAnalyzer();
@@ -42,7 +43,7 @@ namespace WinHUD.Views
                 initialDeviceName: _viewModel.Config.TargetMonitorDeviceName
             );
 
-            this.SizeChanged += (s, e) => SnapToTargetScreen();
+            SizeChanged += (s, e) => SnapToTargetScreen();
             _viewModel.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(MainViewModel.IsOverlayVisible) && _viewModel.IsOverlayVisible)
@@ -55,7 +56,7 @@ namespace WinHUD.Views
         private void KeepTopMost(object? sender, EventArgs e)
         {
             // Don't waste CPU cycles if the overlay is currently hidden
-            if (this.Opacity < 1 || !_viewModel.IsOverlayVisible) return;
+            if (Opacity < 1 || !_viewModel.IsOverlayVisible) return;
             
             // Aggressively re-assert Z-Order every 500ms!
             // SWP_NOACTIVATE ensures it never steals focus from the user's game.
@@ -71,7 +72,7 @@ namespace WinHUD.Views
 
         private void UpdateContrast(object? sender, EventArgs e)
         {
-            if (this.Opacity < 1 || !_viewModel.IsOverlayVisible) return;
+            if (Opacity < 1 || !_viewModel.IsOverlayVisible) return;
             try
             {
                 var source = PresentationSource.FromVisual(this);
@@ -80,10 +81,10 @@ namespace WinHUD.Views
                 double dpiX = source.CompositionTarget.TransformToDevice.M11;
                 double dpiY = source.CompositionTarget.TransformToDevice.M22;
 
-                int pixelLeft = (int)(this.Left * dpiX);
-                int pixelTop = (int)(this.Top * dpiY);
-                int pixelWidth = (int)(this.ActualWidth * dpiX);
-                int pixelHeight = (int)(this.ActualHeight * dpiY);
+                int pixelLeft = (int)(Left * dpiX);
+                int pixelTop = (int)(Top * dpiY);
+                int pixelWidth = (int)(ActualWidth * dpiX);
+                int pixelHeight = (int)(ActualHeight * dpiY);
 
                 // Sample dead center of the overlay
                 int sampleX = pixelLeft + (pixelWidth / 2);
@@ -96,7 +97,7 @@ namespace WinHUD.Views
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"[Main] Error updating contrast: {ex.Message}");
+                Log.Error(ex, "[Main] Error updating contrast: {Message}", ex.Message);
             }
         }
 
@@ -142,12 +143,12 @@ namespace WinHUD.Views
                 }
 
                 var workArea = screen.WorkingArea;
-                this.Left = (workArea.Left / dpiX) + 10;
-                this.Top = (workArea.Bottom / dpiY) - this.ActualHeight - 10;
+                Left = (workArea.Left / dpiX) + 10;
+                Top = (workArea.Bottom / dpiY) - ActualHeight - 10;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"[Main] Error snapping: {ex.Message}");
+                Log.Error(ex, "[Main] Error snapping: {Message}", ex.Message);
             }
         }
 
@@ -164,6 +165,7 @@ namespace WinHUD.Views
         {
             if (msg == NativeMethods.WM_HOTKEY && wParam.ToInt32() == 9000)
             {
+                Log.Debug("[MainWindow] Hotkey pressed, toggling overlay mode.");
                 _viewModel.ToggleOverlayMode();
                 handled = true;
             }
